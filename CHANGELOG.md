@@ -5,11 +5,107 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2024-01-16
+
+### Added
+- **Complete Authentication System with Supabase Auth**
+  - User registration with email verification
+  - Secure login/logout functionality
+  - Password reset flow with email confirmation
+  - Session persistence using expo-secure-store
+  - Role-based access control (admin, editor, viewer)
+  - Profile management with automatic creation
+
+- **Authentication Screens**
+  - Login screen with form validation and error handling
+  - Register screen with strong password requirements
+  - Forgot password screen with email reset flow
+  - Unauthorized access screen for permission denied scenarios
+
+- **Route Protection System**
+  - ProtectedRoute component for securing authenticated routes
+  - Role-based route protection
+  - Automatic redirects for unauthorized access
+  - Higher-order component wrapper for screen protection
+
+- **Enhanced Dashboard**
+  - Role-based document management
+  - Document CRUD operations with permissions
+  - Search and filter functionality
+  - User profile display with role information
+  - Secure logout with session cleanup
+
+- **Database Schema Enhancements**
+  - User profiles table with role assignments
+  - Documents table with user ownership
+  - Role-based permissions system
+  - Comprehensive TypeScript type definitions
+
+- **Authentication Hooks**
+  - Enhanced useAuth hook with role management
+  - Session state management
+  - Profile loading and refresh capabilities
+  - Helper hooks: useUser, useProfile, useRole, useRequireAuth, useRequireRole
+
+### Enhanced
+- **Supabase Integration**
+  - Extended auth helper functions
+  - Document management functions
+  - Role checking and permission validation
+  - Profile management operations
+
+- **Application Structure**
+  - AuthProvider context for global state management
+  - Updated app layout with proper routing
+  - Beautiful landing page for new users
+  - Improved navigation flow
+
+### Security
+- Secure session storage using expo-secure-store
+- Role-based access control enforcement
+- Protected routes with automatic authentication checks
+- Secure password requirements and validation
+- Complete session cleanup on logout
+
+## [1.0.0] - 2024-01-15 - Initial Release
+
+### Added
+- **Project Setup**
+  - Expo React Native TypeScript boilerplate
+  - Supabase integration for backend services
+  - Expo Router for navigation
+  - NativeWind for styling (Tailwind CSS)
+
+- **Authentication Foundation**
+  - Basic Supabase auth configuration
+  - User authentication hooks
+  - Session management setup
+
+- **Project Structure**
+  - Organized folder structure
+  - Core screens and components
+  - Custom hooks for reusable logic
+  - Reusable UI components
+
+- **Development Environment**
+  - Environment variables configuration
+  - TypeScript configuration
+  - ESLint and development tools
+  - Metro bundler configuration
+
+- **Documentation**
+  - README with setup instructions
+  - Project structure documentation
+  - Development guidelines
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [Unreleased]
 
 ### Added
-- Initial project setup
-- CHANGELOG.md file for tracking project changes
 
 ### Changed
 
@@ -21,10 +117,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-## [1.0.0] - YYYY-MM-DD
+## [1.0.0] - 2024-01-15
 
 ### Added
-- Initial release
+- Initial project setup with Expo React Native TypeScript boilerplate
+- Supabase integration for authentication and database
+- Expo Router navigation system with file-based routing
+- NativeWind (Tailwind CSS) styling configuration
+- Authentication system with sign-in/sign-up functionality
+- Project structure with organized folders (screens, components, lib, hooks)
+- Core screens: Home (index), Authentication, and Profile
+- Custom hooks for authentication state management (useAuth)
+- Reusable components (LoadingSpinner)
+- Supabase client configuration with Expo SecureStore integration
+- Environment variables setup for secure API key management
+- Metro bundler configuration for NativeWind
+- Tailwind CSS configuration with custom theme
+- Global CSS styles with utility classes and component styles
+- App configuration updates for expo-router scheme
+- Comprehensive README.md with setup instructions
+- TypeScript configuration for type safety
+- Package.json with all required dependencies and scripts
 
 ---
 
