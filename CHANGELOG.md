@@ -114,6 +114,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 ### Fixed
+- Fixed Android bundling error caused by JSX syntax in TypeScript file
+  - Renamed `hooks/useAuth.ts` to `hooks/useAuth.tsx` to support JSX compilation
+  - Updated all import statements across the application to reference correct file paths
+- Fixed React component import/export errors
+  - Corrected LoadingSpinner component imports from named to default import syntax
+  - Fixed "Element type is invalid" error in HomePage and other components
+  - Updated import statements in all authentication screens and components
 
 ### Security
 
