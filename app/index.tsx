@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
-import { LoadingSpinner } from '../components/LoadingSpinner';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function HomePage() {
   const router = useRouter();

@@ -11,7 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { LoadingSpinner } from '../components/LoadingSpinner';
+import LoadingSpinner from '../components/LoadingSpinner';
 import {
   getUserDocuments,
   createDocument,

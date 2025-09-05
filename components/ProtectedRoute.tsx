@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth, useRequireAuth } from '../hooks/useAuth';
-import { LoadingSpinner } from './LoadingSpinner';
+import { useAuth } from '../hooks/useAuth';
+import LoadingSpinner from './LoadingSpinner';
 import { UserRole } from '../lib/supabase';
 
 interface ProtectedRouteProps {
@@ -19,7 +19,7 @@ export function ProtectedRoute({
   loadingMessage = 'Checking authentication...',
 }: ProtectedRouteProps) {
   const router = useRouter();
-  const { isAuthenticated, loading, hasRole } = useAuth();
+  const { isAuthenticated, loading, hasRole, user, role } = useAuth();
 
   // Show loading while checking authentication
   if (loading) {

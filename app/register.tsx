@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { signUp } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { LoadingSpinner } from '../components/LoadingSpinner';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 interface RegisterFormData {
   fullName: string;
