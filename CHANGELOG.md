@@ -106,6 +106,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Created comprehensive Supabase database schema with SQL migration file
+  - Added `users` table extending Supabase auth.users with profile data
+  - Added `templates` table for document templates with JSON schema definitions
+  - Added `documents` table for user-generated documents with file storage references
+  - Implemented Row Level Security (RLS) policies for data isolation
+  - Added automatic user profile creation trigger
+  - Included sample document templates (Business Letter, Invoice, Meeting Minutes)
+- Created detailed Supabase setup guide with multiple implementation methods
+  - Dashboard-based setup instructions for beginners
+  - CLI-based setup for development workflows
+  - Direct SQL execution methods
+  - Comprehensive troubleshooting and testing guidance
+- Fully functional dashboard screen for logged-in users with document management
+- Document list display with template name, file type, and creation date
+- View, Download, and Delete actions for each document
+- Floating action button for creating new documents (navigates to template selection)
+- Real-time document fetching from Supabase with proper error handling
+- Search functionality to filter documents by template name
 
 ### Changed
 
@@ -121,6 +139,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Corrected LoadingSpinner component imports from named to default import syntax
   - Fixed "Element type is invalid" error in HomePage and other components
   - Updated import statements in all authentication screens and components
+- Database schema mismatch by updating migration to create `profiles` table instead of `users` table to match application code expectations
+- User profile loading error (PGRST205) by correcting table references in migration file and setup guide
+- Fixed migration script to handle re-running by adding DROP IF EXISTS statements for policies, functions, and triggers
 
 ### Security
 

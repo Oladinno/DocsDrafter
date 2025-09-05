@@ -86,12 +86,16 @@ WHERE schemaname = 'public';
 
 ### Tables Created
 
-#### 1. `users` Table
+#### 1. `profiles` Table
 - **Purpose**: Extends Supabase auth.users with additional profile data
 - **Columns**:
   - `id` (UUID, Primary Key, References auth.users)
   - `email` (TEXT, Unique)
+  - `full_name` (TEXT)
+  - `avatar_url` (TEXT)
+  - `role` (TEXT, Default: 'user')
   - `created_at` (TIMESTAMP)
+  - `updated_at` (TIMESTAMP)
 
 #### 2. `templates` Table
 - **Purpose**: Stores document templates with JSON schema definitions
@@ -106,7 +110,7 @@ WHERE schemaname = 'public';
 - **Purpose**: Tracks user-generated documents
 - **Columns**:
   - `id` (UUID, Primary Key)
-  - `user_id` (UUID, Foreign Key to users)
+  - `user_id` (UUID, Foreign Key to profiles)
   - `template_name` (TEXT)
   - `storage_path` (TEXT)
   - `file_type` (TEXT)
@@ -114,7 +118,7 @@ WHERE schemaname = 'public';
 
 ### Row Level Security (RLS) Policies
 
-#### Users Table Policies
+#### Profiles Table Policies
 - Users can only view, update, and insert their own profile
 - Prevents users from accessing other users' data
 

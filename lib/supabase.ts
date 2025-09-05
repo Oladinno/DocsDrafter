@@ -57,24 +57,44 @@ export interface Database {
           updated_at?: string;
         };
       };
+      templates: {
+        Row: {
+          id: string;
+          name: string;
+          json_schema: any;
+          description: string | null;
+          created_at: string;
+        };
+        Insert: {
+          name: string;
+          json_schema: any;
+          description?: string | null;
+        };
+        Update: {
+          name?: string;
+          json_schema?: any;
+          description?: string | null;
+        };
+      };
       documents: {
         Row: {
           id: string;
-          title: string;
-          content: string | null;
           user_id: string;
+          template_name: string;
+          storage_path: string;
+          file_type: string;
           created_at: string;
-          updated_at: string;
         };
         Insert: {
-          title: string;
-          content?: string | null;
           user_id: string;
+          template_name: string;
+          storage_path: string;
+          file_type: string;
         };
         Update: {
-          title?: string;
-          content?: string | null;
-          updated_at?: string;
+          template_name?: string;
+          storage_path?: string;
+          file_type?: string;
         };
       };
     };
@@ -87,9 +107,16 @@ export interface Database {
 export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row'];
 export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T];
 
-// User profile type
+// Database table types
 export type UserProfile = Tables<'profiles'>;
+export type Template = Tables<'templates'>;
+export type Document = Tables<'documents'>;
 export type UserRole = 'admin' | 'user';
+
+// Form data type for document generation
+export interface DocumentFormData {
+  [key: string]: any;
+}
 
 // Helper functions for common operations
 export const auth = supabase.auth;
@@ -192,13 +219,40 @@ export const canAccessDocument = async (userId: string, documentId: string): Pro
   return document.user_id === userId;
 };
 
+// Template management functions
+export const getTemplates = async () => {
+  const { data, error } = await supabase
+    .from('templates')
+    .select('*')
+    .order('name', { ascending: true });
+  return { data, error };
+};
+
+export const getTemplate = async (templateId: string) => {
+  const { data, error } = await supabase
+    .from('templates')
+    .select('*')
+    .eq('id', templateId)
+    .single();
+  return { data, error };
+};
+
+export const getTemplateByName = async (templateName: string) => {
+  const { data, error } = await supabase
+    .from('templates')
+    .select('*')
+    .eq('name', templateName)
+    .single();
+  return { data, error };
+};
+
 // Document management functions
 export const getUserDocuments = async (userId: string) => {
   const { data, error } = await supabase
     .from('documents')
     .select('*')
     .eq('user_id', userId)
-    .order('updated_at', { ascending: false });
+    .order('created_at', { ascending: false });
   return { data, error };
 };
 
@@ -214,7 +268,7 @@ export const createDocument = async (document: Database['public']['Tables']['doc
 export const updateDocument = async (documentId: string, updates: Database['public']['Tables']['documents']['Update']) => {
   const { data, error } = await supabase
     .from('documents')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update(updates)
     .eq('id', documentId)
     .select()
     .single();
@@ -227,4 +281,15 @@ export const deleteDocument = async (documentId: string) => {
     .delete()
     .eq('id', documentId);
   return { error };
+};
+
+// Document generation function
+export const generateDocument = async (templateName: string, formData: DocumentFormData) => {
+  const { data, error } = await supabase.functions.invoke('generate-document', {
+    body: {
+      template_name: templateName,
+      form_data: formData,
+    },
+  });
+  return { data, error };
 };

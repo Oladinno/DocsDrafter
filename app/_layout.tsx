@@ -24,6 +24,8 @@ export default function RootLayout() {
         <Stack.Screen name="unauthorized" options={{ headerShown: false }} />
         <Stack.Screen name="auth" options={{ title: 'Authentication' }} />
         <Stack.Screen name="profile" options={{ title: 'Profile' }} />
+        <Stack.Screen name="new-document" options={{ headerShown: false }} />
+        <Stack.Screen name="document-form" options={{ headerShown: false }} />
       </Stack>
     </AuthProvider>
   );

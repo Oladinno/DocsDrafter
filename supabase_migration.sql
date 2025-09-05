@@ -4,11 +4,15 @@
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Create users table (extends Supabase auth.users)
-CREATE TABLE IF NOT EXISTS public.users (
+-- Create profiles table (extends Supabase auth.users)
+CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    role TEXT DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+    full_name TEXT,
+    avatar_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create templates table
@@ -23,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.templates (
 -- Create documents table
 CREATE TABLE IF NOT EXISTS public.documents (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
     template_name TEXT NOT NULL,
     storage_path TEXT NOT NULL,
     file_type TEXT NOT NULL,
@@ -31,41 +35,50 @@ CREATE TABLE IF NOT EXISTS public.documents (
 );
 
 -- Enable Row Level Security (RLS)
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies for users table
+-- RLS Policies for profiles table
 -- Users can only view and update their own profile
-CREATE POLICY "Users can view own profile" ON public.users
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
+CREATE POLICY "Users can view own profile" ON public.profiles
     FOR SELECT USING (auth.uid() = id);
 
-CREATE POLICY "Users can update own profile" ON public.users
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile" ON public.profiles
     FOR UPDATE USING (auth.uid() = id);
 
-CREATE POLICY "Users can insert own profile" ON public.users
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
+CREATE POLICY "Users can insert own profile" ON public.profiles
     FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- RLS Policies for templates table
 -- All authenticated users can view templates (public templates)
+DROP POLICY IF EXISTS "Authenticated users can view templates" ON public.templates;
 CREATE POLICY "Authenticated users can view templates" ON public.templates
     FOR SELECT TO authenticated USING (true);
 
 -- Only authenticated users can create templates (for future admin functionality)
+DROP POLICY IF EXISTS "Authenticated users can create templates" ON public.templates;
 CREATE POLICY "Authenticated users can create templates" ON public.templates
     FOR INSERT TO authenticated WITH CHECK (true);
 
 -- RLS Policies for documents table
 -- Users can only access their own documents
+DROP POLICY IF EXISTS "Users can view own documents" ON public.documents;
 CREATE POLICY "Users can view own documents" ON public.documents
     FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can create own documents" ON public.documents;
 CREATE POLICY "Users can create own documents" ON public.documents
     FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own documents" ON public.documents;
 CREATE POLICY "Users can update own documents" ON public.documents
     FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own documents" ON public.documents;
 CREATE POLICY "Users can delete own documents" ON public.documents
     FOR DELETE USING (auth.uid() = user_id);
 
@@ -76,11 +89,12 @@ CREATE INDEX IF NOT EXISTS idx_documents_created_at ON public.documents(created_
 CREATE INDEX IF NOT EXISTS idx_templates_name ON public.templates(name);
 
 -- Function to automatically create user profile on signup
+DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public.users (id, email)
-    VALUES (NEW.id, NEW.email);
+    INSERT INTO public.profiles (id, email, role, full_name)
+    VALUES (NEW.id, NEW.email, 'user', COALESCE(NEW.raw_user_meta_data->>'full_name', ''));
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -171,7 +185,7 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
 -- Comments for documentation
-COMMENT ON TABLE public.users IS 'User profiles extending Supabase auth.users';
+COMMENT ON TABLE public.profiles IS 'User profiles extending Supabase auth.users';
 COMMENT ON TABLE public.templates IS 'Document templates with JSON schema definitions';
 COMMENT ON TABLE public.documents IS 'User-generated documents with template references and file storage paths';
 
