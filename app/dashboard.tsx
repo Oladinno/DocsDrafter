@@ -7,22 +7,33 @@ import {
   Alert,
   RefreshControl,
   TextInput,
-  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useAuth } from '../hooks/useAuth';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { supabase } from '../lib/supabase';
+import { 
+  getUserDocuments, 
+  deleteDocumentComplete, 
+  getDocumentDownloadUrl 
+} from '../lib/supabase';
 
 // Document type based on the new schema
 interface Document {
   id: string;
   user_id: string;
-  template_name: string;
-  storage_path: string;
-  file_type: string;
+  template_id: string;
+  title: string;
+  file_path: string;
+  file_type: 'PDF' | 'DOCX';
+  status: string;
+  metadata?: any;
   created_at: string;
+  updated_at: string;
 }
 
 interface DocumentItemProps {
@@ -30,30 +41,53 @@ interface DocumentItemProps {
   onView: (document: Document) => void;
   onDownload: (document: Document) => void;
   onDelete: (documentId: string) => void;
+  onRefresh: () => void;
 }
 
-function DocumentItem({ document, onView, onDownload, onDelete }: DocumentItemProps) {
+function DocumentItem({ document, onView, onDownload, onDelete, onRefresh }: DocumentItemProps) {
+  const [downloading, setDownloading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   const handleDelete = () => {
     Alert.alert(
       'Delete Document',
-      `Are you sure you want to delete "${document.template_name}"?`,
+      `Are you sure you want to delete "${document.title}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => onDelete(document.id),
+          onPress: async () => {
+            setDeleting(true);
+            await onDelete(document.id);
+            setDeleting(false);
+            onRefresh();
+          },
         },
       ]
     );
   };
 
+  const handleDownload = async () => {
+    setDownloading(true);
+    await onDownload(document);
+    setDownloading(false);
+  };
+
   const getFileTypeIcon = (fileType: string) => {
     switch (fileType.toLowerCase()) {
-      case 'pdf': return '📄';
-      case 'docx': return '📝';
-      case 'txt': return '📃';
-      default: return '📄';
+      case 'pdf': return 'document-text';
+      case 'docx': return 'document';
+      default: return 'document-text';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'text-green-600';
+      case 'pending': return 'text-yellow-600';
+      case 'failed': return 'text-red-600';
+      default: return 'text-gray-600';
     }
   };
 
@@ -62,19 +96,33 @@ function DocumentItem({ document, onView, onDownload, onDelete }: DocumentItemPr
       <View className="flex-row justify-between items-start mb-2">
         <View className="flex-1 mr-3">
           <View className="flex-row items-center mb-2">
-            <Text className="text-lg mr-2">
-              {getFileTypeIcon(document.file_type)}
+            <Ionicons 
+              name={getFileTypeIcon(document.file_type)} 
+              size={20} 
+              color="#6B7280" 
+              style={{ marginRight: 8 }}
+            />
+            <Text className="text-lg font-semibold text-gray-900 flex-1" numberOfLines={1}>
+              {document.title}
             </Text>
-            <Text className="text-lg font-semibold text-gray-900 flex-1">
-              {document.template_name}
-            </Text>
+            <View className={`px-2 py-1 rounded-full ${
+              document.status === 'completed' ? 'bg-green-100' :
+              document.status === 'pending' ? 'bg-yellow-100' : 'bg-red-100'
+            }`}>
+              <Text className={`text-xs font-medium ${
+                document.status === 'completed' ? 'text-green-600' :
+                document.status === 'pending' ? 'text-yellow-600' : 'text-red-600'
+              }`}>
+                {document.status.charAt(0).toUpperCase() + document.status.slice(1)}
+              </Text>
+            </View>
           </View>
           <View className="flex-row items-center">
             <Text className="text-xs text-gray-500 mr-4">
-              Type: {document.file_type.toUpperCase()}
+              {document.file_type}
             </Text>
             <Text className="text-xs text-gray-500">
-              Created: {new Date(document.created_at).toLocaleDateString()}
+              {new Date(document.created_at).toLocaleDateString()}
             </Text>
           </View>
         </View>
@@ -82,24 +130,47 @@ function DocumentItem({ document, onView, onDownload, onDelete }: DocumentItemPr
       
       <View className="flex-row justify-end pt-3 border-t border-gray-100 space-x-2">
         <TouchableOpacity
-          className="bg-green-100 px-3 py-1 rounded"
+          className="bg-green-100 px-3 py-2 rounded-lg flex-row items-center"
           onPress={() => onView(document)}
+          disabled={document.status !== 'completed'}
         >
-          <Text className="text-green-600 text-sm font-medium">View</Text>
+          <Ionicons name="eye-outline" size={16} color="#059669" />
+          <Text className="text-green-600 text-sm font-medium ml-1">View</Text>
         </TouchableOpacity>
         
         <TouchableOpacity
-          className="bg-blue-100 px-3 py-1 rounded"
-          onPress={() => onDownload(document)}
+          className="bg-blue-100 px-3 py-2 rounded-lg flex-row items-center"
+          onPress={handleDownload}
+          disabled={downloading || document.status !== 'completed'}
         >
-          <Text className="text-blue-600 text-sm font-medium">Download</Text>
+          {downloading ? (
+            <ActivityIndicator size="small" color="#2563EB" />
+          ) : (
+            <Ionicons name="download-outline" size={16} color="#2563EB" />
+          )}
+          <Text className="text-blue-600 text-sm font-medium ml-1">
+            {downloading ? 'Downloading...' : 'Download'}
+          </Text>
         </TouchableOpacity>
         
         <TouchableOpacity
-          className="bg-red-100 px-3 py-1 rounded"
+          className="bg-red-100 px-3 py-2 rounded-lg flex-row items-center"
           onPress={handleDelete}
+          disabled={deleting}
         >
-          <Text className="text-red-600 text-sm font-medium">Delete</Text>
+          {deleting ? (
+            <ActivityIndicator size="small" color="#DC2626" />
+          ) : (
+            <Ionicons name="trash-outline" size={16} color="#DC2626" />
+          )}
+          <Text className="text-red-600 text-sm font-medium ml-1">
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
         </TouchableOpacity>
       </View>
     </View>
@@ -118,11 +189,7 @@ function DashboardContent() {
     if (!user) return;
     
     try {
-      const { data, error } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      const { data, error } = await getUserDocuments();
         
       if (error) {
         console.error('Error loading documents:', error);
@@ -152,15 +219,11 @@ function DashboardContent() {
 
   const handleDeleteDocument = async (documentId: string) => {
     try {
-      const { error } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', documentId);
+      const { error } = await deleteDocumentComplete(documentId);
         
       if (error) {
         Alert.alert('Error', 'Failed to delete document');
       } else {
-        setDocuments(documents.filter(doc => doc.id !== documentId));
         Alert.alert('Success', 'Document deleted successfully');
       }
     } catch (error) {
@@ -169,28 +232,35 @@ function DashboardContent() {
   };
 
   const handleViewDocument = (document: Document) => {
-    // Navigate to document viewer or open in browser
-    router.push(`/document/${document.id}`);
+    router.push({
+      pathname: '/document-viewer',
+      params: { documentId: document.id }
+    });
   };
 
   const handleDownloadDocument = async (document: Document) => {
     try {
-      if (document.storage_path) {
-        // For now, we'll show an alert. In a real app, you'd download from Supabase Storage
-        Alert.alert(
-          'Download',
-          `Downloading ${document.template_name}.${document.file_type}`,
-          [
-            { text: 'OK' }
-          ]
-        );
-        // In a real implementation:
-        // const { data } = await supabase.storage.from('documents').download(document.storage_path);
-        // Then handle the file download
+      const { data: downloadUrl, error } = await getDocumentDownloadUrl(document.file_path);
+      if (error) throw error;
+      
+      if (!downloadUrl) {
+        Alert.alert('Error', 'Could not get download URL');
+        return;
+      }
+
+      // Download the file
+      const fileUri = FileSystem.documentDirectory + document.title;
+      const downloadResult = await FileSystem.downloadAsync(downloadUrl, fileUri);
+      
+      if (downloadResult.status === 200) {
+        // Share the downloaded file
+        await Sharing.shareAsync(downloadResult.uri);
+        Alert.alert('Success', 'Document downloaded and ready to share');
       } else {
-        Alert.alert('Error', 'Document file not found');
+        Alert.alert('Error', 'Failed to download document');
       }
     } catch (error) {
+      console.error('Error downloading document:', error);
       Alert.alert('Error', 'Failed to download document');
     }
   };
@@ -223,7 +293,7 @@ function DashboardContent() {
   };
 
   const filteredDocuments = documents.filter(doc =>
-    doc.template_name.toLowerCase().includes(searchQuery.toLowerCase())
+    doc.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
 
@@ -293,6 +363,7 @@ function DashboardContent() {
                 onView={handleViewDocument}
                 onDownload={handleDownloadDocument}
                 onDelete={handleDeleteDocument}
+                onRefresh={handleRefresh}
               />
             )}
             refreshControl={

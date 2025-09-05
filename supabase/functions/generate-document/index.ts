@@ -1,14 +1,20 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { PDFDocument, rgb, StandardFonts } from 'https://esm.sh/pdf-lib@1.17.1';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'https://esm.sh/docx@8.2.2';
 
 interface DocumentRequest {
-  template_name: string;
-  form_data: Record<string, any>;
+  template_id: string;
+  user_inputs: Record<string, any>;
+  file_type: 'PDF' | 'DOCX';
 }
 
 interface DocumentResponse {
+  document_id: string;
   storage_path: string;
   file_type: string;
+  download_url: string;
+  created_at: string;
 }
 
 const corsHeaders = {
@@ -51,11 +57,22 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { template_name, form_data }: DocumentRequest = await req.json();
+    const { template_id, user_inputs, file_type }: DocumentRequest = await req.json();
 
-    if (!template_name || !form_data) {
+    if (!template_id || !user_inputs || !file_type) {
       return new Response(
-        JSON.stringify({ error: 'Missing template_name or form_data' }),
+        JSON.stringify({ error: 'Missing template_id, user_inputs, or file_type' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Validate file_type
+    if (!['PDF', 'DOCX'].includes(file_type)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid file_type. Must be PDF or DOCX' }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -67,7 +84,7 @@ serve(async (req) => {
     const { data: template, error: templateError } = await supabaseClient
       .from('templates')
       .select('*')
-      .eq('name', template_name)
+      .eq('id', template_id)
       .single();
 
     if (templateError || !template) {
@@ -80,23 +97,33 @@ serve(async (req) => {
       );
     }
 
-    // Generate document content based on template
-    const documentContent = generateDocumentContent(template, form_data);
+    // Generate document content by merging user inputs into template placeholders
+    const documentContent = mergeTemplateWithInputs(template, user_inputs);
 
-    // Create file name with timestamp
+    // Generate unique document ID
+    const documentId = crypto.randomUUID();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const fileName = `${template_name}_${timestamp}.pdf`;
+    const fileExtension = file_type.toLowerCase();
+    const fileName = `${documentId}.${fileExtension}`;
     const storagePath = `documents/${user.id}/${fileName}`;
 
-    // For this implementation, we'll create a simple PDF-like content
-    // In a real implementation, you might use a PDF generation library
-    const pdfContent = createSimplePDF(template.name, documentContent);
+    // Generate document based on file type
+    let documentBuffer: Uint8Array;
+    let contentType: string;
+
+    if (file_type === 'PDF') {
+      documentBuffer = await generatePDF(template, documentContent);
+      contentType = 'application/pdf';
+    } else {
+      documentBuffer = await generateDOCX(template, documentContent);
+      contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
 
     // Upload to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabaseClient.storage
       .from('documents')
-      .upload(storagePath, pdfContent, {
-        contentType: 'application/pdf',
+      .upload(storagePath, documentBuffer, {
+        contentType,
         upsert: false,
       });
 
@@ -111,9 +138,50 @@ serve(async (req) => {
       );
     }
 
+    // Insert document metadata into documents table
+    const { data: documentRecord, error: insertError } = await supabaseClient
+      .from('documents')
+      .insert({
+        id: documentId,
+        user_id: user.id,
+        template_id: template_id,
+        title: `${template.name} - ${new Date().toLocaleDateString()}`,
+        file_path: storagePath,
+        file_type: file_type,
+        status: 'completed',
+        metadata: {
+          template_name: template.name,
+          user_inputs: user_inputs,
+          generated_at: new Date().toISOString()
+        }
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Database insert error:', insertError);
+      // Try to clean up uploaded file
+      await supabaseClient.storage.from('documents').remove([storagePath]);
+      return new Response(
+        JSON.stringify({ error: 'Failed to save document metadata' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Generate download URL
+    const { data: urlData } = await supabaseClient.storage
+      .from('documents')
+      .createSignedUrl(storagePath, 3600); // 1 hour expiry
+
     const response: DocumentResponse = {
+      document_id: documentId,
       storage_path: storagePath,
-      file_type: 'pdf',
+      file_type: file_type,
+      download_url: urlData?.signedUrl || '',
+      created_at: documentRecord.created_at,
     };
 
     return new Response(JSON.stringify(response), {
@@ -131,16 +199,16 @@ serve(async (req) => {
   }
 });
 
-function generateDocumentContent(
+function mergeTemplateWithInputs(
   template: any,
-  formData: Record<string, any>
+  userInputs: Record<string, any>
 ): Record<string, any> {
   // Parse the template's JSON schema to understand the structure
   const schema = JSON.parse(template.json_schema);
   const content: Record<string, any> = {};
 
-  // Process each field in the form data according to the schema
-  for (const [key, value] of Object.entries(formData)) {
+  // Process each field in the user inputs according to the schema
+  for (const [key, value] of Object.entries(userInputs)) {
     if (schema.properties && schema.properties[key]) {
       const fieldSchema = schema.properties[key];
       
@@ -155,43 +223,190 @@ function generateDocumentContent(
         case 'array':
           content[key] = Array.isArray(value) ? value : [value].filter(Boolean);
           break;
+        case 'boolean':
+          content[key] = Boolean(value);
+          break;
         default:
           content[key] = value;
       }
     }
   }
 
+  // Add template metadata
+  content._template_name = template.name;
+  content._generated_at = new Date().toLocaleString();
+
   return content;
 }
 
-function createSimplePDF(templateName: string, content: Record<string, any>): Uint8Array {
-  // This is a simplified PDF creation function
-  // In a real implementation, you would use a proper PDF library like jsPDF or PDFKit
+async function generatePDF(template: any, content: Record<string, any>): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([612, 792]); // Standard letter size
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   
-  let pdfText = `Document: ${templateName}\n\n`;
-  pdfText += `Generated on: ${new Date().toLocaleString()}\n\n`;
-  pdfText += 'Content:\n';
-  pdfText += '=' .repeat(50) + '\n\n';
+  const { width, height } = page.getSize();
+  let yPosition = height - 50;
   
+  // Title
+  page.drawText(template.name, {
+    x: 50,
+    y: yPosition,
+    size: 20,
+    font: boldFont,
+    color: rgb(0, 0, 0),
+  });
+  yPosition -= 40;
+  
+  // Generated date
+  page.drawText(`Generated on: ${content._generated_at}`, {
+    x: 50,
+    y: yPosition,
+    size: 10,
+    font: font,
+    color: rgb(0.5, 0.5, 0.5),
+  });
+  yPosition -= 40;
+  
+  // Content
   for (const [key, value] of Object.entries(content)) {
+    if (key.startsWith('_')) continue; // Skip metadata fields
+    
     const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     
+    // Field label
+    page.drawText(`${formattedKey}:`, {
+      x: 50,
+      y: yPosition,
+      size: 12,
+      font: boldFont,
+      color: rgb(0, 0, 0),
+    });
+    yPosition -= 20;
+    
+    // Field value
+    let valueText = '';
     if (Array.isArray(value)) {
-      pdfText += `${formattedKey}:\n`;
-      value.forEach((item, index) => {
-        pdfText += `  ${index + 1}. ${item}\n`;
-      });
-      pdfText += '\n';
+      valueText = value.join(', ');
     } else {
-      pdfText += `${formattedKey}: ${value}\n\n`;
+      valueText = String(value);
+    }
+    
+    // Handle long text by wrapping
+    const maxWidth = width - 100;
+    const words = valueText.split(' ');
+    let line = '';
+    
+    for (const word of words) {
+      const testLine = line + (line ? ' ' : '') + word;
+      const textWidth = font.widthOfTextAtSize(testLine, 11);
+      
+      if (textWidth > maxWidth && line) {
+        page.drawText(line, {
+          x: 70,
+          y: yPosition,
+          size: 11,
+          font: font,
+          color: rgb(0, 0, 0),
+        });
+        yPosition -= 15;
+        line = word;
+      } else {
+        line = testLine;
+      }
+    }
+    
+    if (line) {
+      page.drawText(line, {
+        x: 70,
+        y: yPosition,
+        size: 11,
+        font: font,
+        color: rgb(0, 0, 0),
+      });
+    }
+    
+    yPosition -= 30;
+    
+    // Add new page if needed
+    if (yPosition < 100) {
+      const newPage = pdfDoc.addPage([612, 792]);
+      yPosition = height - 50;
     }
   }
   
-  pdfText += '\n' + '=' .repeat(50) + '\n';
-  pdfText += 'End of Document';
+  return await pdfDoc.save();
+}
+
+async function generateDOCX(template: any, content: Record<string, any>): Promise<Uint8Array> {
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          // Title
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: template.name,
+                bold: true,
+                size: 32,
+              }),
+            ],
+            heading: HeadingLevel.TITLE,
+          }),
+          
+          // Generated date
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `Generated on: ${content._generated_at}`,
+                italics: true,
+                size: 20,
+              }),
+            ],
+          }),
+          
+          new Paragraph({ text: '' }), // Empty line
+          
+          // Content
+          ...Object.entries(content)
+            .filter(([key]) => !key.startsWith('_'))
+            .flatMap(([key, value]) => {
+              const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              
+              let valueText = '';
+              if (Array.isArray(value)) {
+                valueText = value.join(', ');
+              } else {
+                valueText = String(value);
+              }
+              
+              return [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `${formattedKey}:`,
+                      bold: true,
+                      size: 24,
+                    }),
+                  ],
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: valueText,
+                      size: 22,
+                    }),
+                  ],
+                }),
+                new Paragraph({ text: '' }), // Empty line
+              ];
+            }),
+        ],
+      },
+    ],
+  });
   
-  // Convert text to bytes (simplified PDF format)
-  // Note: This creates a text file, not a real PDF
-  // For production, use a proper PDF generation library
-  return new TextEncoder().encode(pdfText);
+  return await Packer.toBuffer(doc);
 }

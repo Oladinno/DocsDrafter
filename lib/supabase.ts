@@ -80,21 +80,32 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          template_name: string;
-          storage_path: string;
-          file_type: string;
+          template_id: string;
+          title: string;
+          file_path: string;
+          file_type: 'PDF' | 'DOCX';
+          status: 'pending' | 'completed' | 'failed';
+          metadata: any;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
+          id?: string;
           user_id: string;
-          template_name: string;
-          storage_path: string;
-          file_type: string;
+          template_id: string;
+          title: string;
+          file_path: string;
+          file_type: 'PDF' | 'DOCX';
+          status?: 'pending' | 'completed' | 'failed';
+          metadata?: any;
         };
         Update: {
-          template_name?: string;
-          storage_path?: string;
-          file_type?: string;
+          title?: string;
+          file_path?: string;
+          file_type?: 'PDF' | 'DOCX';
+          status?: 'pending' | 'completed' | 'failed';
+          metadata?: any;
+          updated_at?: string;
         };
       };
     };
@@ -284,12 +295,179 @@ export const deleteDocument = async (documentId: string) => {
 };
 
 // Document generation function
-export const generateDocument = async (templateName: string, formData: DocumentFormData) => {
+export const generateDocument = async (
+  templateId: string, 
+  userInputs: DocumentFormData, 
+  fileType: 'PDF' | 'DOCX' = 'PDF'
+) => {
   const { data, error } = await supabase.functions.invoke('generate-document', {
     body: {
-      template_name: templateName,
-      form_data: formData,
+      template_id: templateId,
+      user_inputs: userInputs,
+      file_type: fileType,
     },
   });
   return { data, error };
+};
+
+// Enhanced document management functions
+export const getDocumentById = async (documentId: string) => {
+  const { data, error } = await supabase
+    .from('documents')
+    .select(`
+      *,
+      templates (
+        id,
+        name,
+        description
+      )
+    `)
+    .eq('id', documentId)
+    .single();
+  return { data, error };
+};
+
+export const getDocumentDownloadUrl = async (filePath: string, expiresIn: number = 3600) => {
+  const { data, error } = await supabase.storage
+    .from('documents')
+    .createSignedUrl(filePath, expiresIn);
+  return { data, error };
+};
+
+export const downloadDocument = async (filePath: string) => {
+  const { data, error } = await supabase.storage
+    .from('documents')
+    .download(filePath);
+  return { data, error };
+};
+
+export const deleteDocumentFile = async (filePath: string) => {
+  const { data, error } = await supabase.storage
+    .from('documents')
+    .remove([filePath]);
+  return { data, error };
+};
+
+// Complete document deletion (database record + file)
+export const deleteDocumentComplete = async (documentId: string) => {
+  // First get the document to find the file path
+  const { data: document, error: fetchError } = await getDocumentById(documentId);
+  if (fetchError || !document) {
+    return { error: fetchError || new Error('Document not found') };
+  }
+
+  // Delete the file from storage
+  const { error: storageError } = await deleteDocumentFile(document.file_path);
+  if (storageError) {
+    console.warn('Failed to delete file from storage:', storageError);
+  }
+
+  // Delete the database record
+  const { error: dbError } = await deleteDocument(documentId);
+  return { error: dbError };
+};
+
+// Document status update
+export const updateDocumentStatus = async (
+  documentId: string, 
+  status: 'pending' | 'completed' | 'failed',
+  metadata?: any
+) => {
+  const updates: Database['public']['Tables']['documents']['Update'] = {
+    status,
+    updated_at: new Date().toISOString(),
+  };
+  
+  if (metadata) {
+    updates.metadata = metadata;
+  }
+
+  const { data, error } = await supabase
+    .from('documents')
+    .update(updates)
+    .eq('id', documentId)
+    .select()
+    .single();
+  return { data, error };
+};
+
+// Get documents with template information
+export const getUserDocumentsWithTemplates = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('documents')
+    .select(`
+      *,
+      templates (
+        id,
+        name,
+        description
+      )
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  return { data, error };
+};
+
+// Filter documents by status
+export const getUserDocumentsByStatus = async (
+  userId: string, 
+  status: 'pending' | 'completed' | 'failed'
+) => {
+  const { data, error } = await supabase
+    .from('documents')
+    .select(`
+      *,
+      templates (
+        id,
+        name,
+        description
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('status', status)
+    .order('created_at', { ascending: false });
+  return { data, error };
+};
+
+// Search documents by title
+export const searchUserDocuments = async (userId: string, searchTerm: string) => {
+  const { data, error } = await supabase
+    .from('documents')
+    .select(`
+      *,
+      templates (
+        id,
+        name,
+        description
+      )
+    `)
+    .eq('user_id', userId)
+    .ilike('title', `%${searchTerm}%`)
+    .order('created_at', { ascending: false });
+  return { data, error };
+};
+
+// Document generation with progress tracking
+export const generateDocumentWithTracking = async (
+  templateId: string,
+  userInputs: DocumentFormData,
+  fileType: 'PDF' | 'DOCX' = 'PDF',
+  onProgress?: (status: string) => void
+) => {
+  try {
+    onProgress?.('Starting document generation...');
+    
+    const { data, error } = await generateDocument(templateId, userInputs, fileType);
+    
+    if (error) {
+      onProgress?.('Document generation failed');
+      return { data: null, error };
+    }
+    
+    onProgress?.('Document generated successfully');
+    return { data, error: null };
+  } catch (err) {
+    onProgress?.('Document generation failed');
+    return { data: null, error: err };
+  }
 };
