@@ -1,10 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import {
+  Text,
+  Card,
+  Button,
+  Avatar,
+  Divider,
+  useTheme as usePaperTheme,
+} from 'react-native-paper';
 import { router } from 'expo-router';
 import { supabase, getCurrentUser, signOut } from '../lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import { useResponsiveStyles, useResponsiveLayout } from '../src/hooks/useResponsive';
 
 export default function ProfileScreen() {
+  const responsive = useResponsiveStyles();
+  const layout = useResponsiveLayout();
+  const paperTheme = usePaperTheme();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -73,10 +85,64 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-white">
-      <View className="px-6 py-8">
-        <View className="bg-gray-50 rounded-lg p-6 mb-6">
-          <Text className="text-2xl font-bold text-gray-800 mb-4">Profile Information</Text>
+    <ScrollView 
+      style={[responsive.containerStyle, { backgroundColor: 'white' }]}
+      contentContainerStyle={{
+        padding: responsive.spacing.md,
+        maxWidth: responsive.isTablet ? 600 : undefined,
+        alignSelf: responsive.isTablet ? 'center' : 'stretch',
+        width: responsive.isTablet ? '100%' : undefined
+      }}
+    >
+      <View style={{ paddingHorizontal: responsive.spacing.lg, paddingVertical: responsive.spacing.xl }}>
+        <Card style={{ 
+          marginBottom: responsive.spacing.lg,
+          backgroundColor: paperTheme.colors.surface 
+        }}>
+          <Card.Content style={{ padding: responsive.spacing.lg }}>
+            <Text 
+              variant="headlineSmall" 
+              style={{ 
+                marginBottom: responsive.spacing.md,
+                textAlign: responsive.isPhone ? 'left' : 'center',
+                color: paperTheme.colors.onSurface
+              }}
+            >
+              Profile Information
+            </Text>
+            
+            <View style={{ 
+              alignItems: 'center', 
+              marginBottom: responsive.spacing.lg 
+            }}>
+              <Avatar.Text 
+                size={responsive.getIconSize('large')}
+                label={user?.email?.charAt(0).toUpperCase() || 'U'}
+                style={{ 
+                  marginBottom: responsive.spacing.md,
+                  backgroundColor: paperTheme.colors.primary
+                }}
+              />
+              <Text 
+                variant="titleLarge" 
+                style={{ 
+                  color: paperTheme.colors.onSurface,
+                  textAlign: 'center'
+                }}
+              >
+                {user?.email}
+              </Text>
+              <Text 
+                variant="bodyMedium" 
+                style={{ 
+                  color: paperTheme.colors.onSurfaceVariant,
+                  textAlign: 'center',
+                  marginTop: responsive.spacing.xs
+                }}
+              >
+                Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}
+              </Text>
+            </View>
           
           <View className="space-y-4">
             <View>
@@ -115,23 +181,46 @@ export default function ProfileScreen() {
               </Text>
             </View>
           </View>
-        </View>
-        
-        <View className="space-y-4">
-          <TouchableOpacity 
-            onPress={() => router.push('/')}
-            className="bg-blue-500 py-4 rounded-lg"
-          >
-            <Text className="text-white text-center font-semibold text-lg">Go to Home</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            onPress={handleSignOut}
-            className="bg-red-500 py-4 rounded-lg"
-          >
-            <Text className="text-white text-center font-semibold text-lg">Sign Out</Text>
-          </TouchableOpacity>
-        </View>
+        </Card.Content>
+      </Card>
+      
+      <Card style={{ 
+        backgroundColor: paperTheme.colors.surface 
+      }}>
+        <Card.Content style={{ padding: responsive.spacing.lg }}>
+            <Divider style={{ marginVertical: responsive.spacing.md }} />
+           
+           <View style={{ gap: responsive.spacing.md }}>
+             <Text 
+               variant="titleMedium" 
+               style={{ 
+                 color: paperTheme.colors.onSurface,
+                 marginBottom: responsive.spacing.sm
+               }}
+             >
+               Account Actions
+             </Text>
+             
+             <Button 
+               mode="contained"
+               onPress={handleSignOut}
+               icon="logout"
+               buttonColor={paperTheme.colors.error}
+               textColor={paperTheme.colors.onError}
+               style={{ 
+                 marginTop: responsive.spacing.sm,
+                 alignSelf: responsive.isPhone ? 'stretch' : 'center',
+                 minWidth: responsive.isPhone ? undefined : 200
+               }}
+               contentStyle={{ 
+                 paddingVertical: responsive.spacing.xs 
+               }}
+             >
+               Sign Out
+             </Button>
+           </View>
+           </Card.Content>
+         </Card>
       </View>
     </ScrollView>
   );

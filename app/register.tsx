@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
+import {
+  Text,
+  TextInput,
+  Button,
+  Surface,
+  Divider,
+  useTheme,
+} from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { signUp } from '../lib/supabase';
@@ -26,6 +31,7 @@ export default function RegisterScreen() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const theme = useTheme();
   
   const {
     control,
@@ -93,31 +99,28 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-gray-50"
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
-        className="flex-1"
+        style={{ flex: 1 }}
       >
-        <View className="flex-1 justify-center px-6 py-12">
-          {/* Header */}
-          <View className="mb-8">
-            <Text className="text-3xl font-bold text-center text-gray-900 mb-2">
-              Create Account
-            </Text>
-            <Text className="text-base text-center text-gray-600">
-              Join DocsDrafter to manage your documents
-            </Text>
-          </View>
-
-          {/* Registration Form */}
-          <View className="space-y-6">
-            {/* Full Name Input */}
-            <View>
-              <Text className="text-sm font-medium text-gray-700 mb-2">
-                Full Name
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
+          <Surface style={{ padding: 24, borderRadius: 12, elevation: 2 }}>
+            {/* Header */}
+            <View style={{ marginBottom: 32, alignItems: 'center' }}>
+              <Text variant="headlineMedium" style={{ marginBottom: 8, textAlign: 'center' }}>
+                Create Account
               </Text>
+              <Text variant="bodyLarge" style={{ textAlign: 'center', color: theme.colors.onSurfaceVariant }}>
+                Join DocsDrafter to manage your documents
+              </Text>
+            </View>
+
+            {/* Registration Form */}
+            <View style={{ gap: 16 }}>
+              {/* Full Name Input */}
               <Controller
                 control={control}
                 name="fullName"
@@ -130,30 +133,26 @@ export default function RegisterScreen() {
                 }}
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    className={`input-field ${
-                      errors.fullName ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    mode="outlined"
+                    label="Full Name"
                     placeholder="Enter your full name"
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
                     autoCapitalize="words"
                     autoCorrect={false}
+                    error={!!errors.fullName}
+                    left={<TextInput.Icon icon="account" />}
                   />
                 )}
               />
               {errors.fullName && (
-                <Text className="text-red-500 text-sm mt-1">
+                <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: -8 }}>
                   {errors.fullName.message}
                 </Text>
               )}
-            </View>
 
-            {/* Email Input */}
-            <View>
-              <Text className="text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </Text>
+              {/* Email Input */}
               <Controller
                 control={control}
                 name="email"
@@ -166,9 +165,8 @@ export default function RegisterScreen() {
                 }}
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    className={`input-field ${
-                      errors.email ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    mode="outlined"
+                    label="Email Address"
                     placeholder="Enter your email"
                     value={value}
                     onChangeText={onChange}
@@ -176,21 +174,18 @@ export default function RegisterScreen() {
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
+                    error={!!errors.email}
+                    left={<TextInput.Icon icon="email" />}
                   />
                 )}
               />
               {errors.email && (
-                <Text className="text-red-500 text-sm mt-1">
+                <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: -8 }}>
                   {errors.email.message}
                 </Text>
               )}
-            </View>
 
-            {/* Password Input */}
-            <View>
-              <Text className="text-sm font-medium text-gray-700 mb-2">
-                Password
-              </Text>
+              {/* Password Input */}
               <Controller
                 control={control}
                 name="password"
@@ -207,9 +202,8 @@ export default function RegisterScreen() {
                 }}
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    className={`input-field ${
-                      errors.password ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    mode="outlined"
+                    label="Password"
                     placeholder="Create a strong password"
                     value={value}
                     onChangeText={onChange}
@@ -217,21 +211,19 @@ export default function RegisterScreen() {
                     secureTextEntry
                     autoCapitalize="none"
                     autoCorrect={false}
+                    error={!!errors.password}
+                    left={<TextInput.Icon icon="lock" />}
+                    right={<TextInput.Icon icon="eye" />}
                   />
                 )}
               />
               {errors.password && (
-                <Text className="text-red-500 text-sm mt-1">
+                <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: -8 }}>
                   {errors.password.message}
                 </Text>
               )}
-            </View>
 
-            {/* Confirm Password Input */}
-            <View>
-              <Text className="text-sm font-medium text-gray-700 mb-2">
-                Confirm Password
-              </Text>
+              {/* Confirm Password Input */}
               <Controller
                 control={control}
                 name="confirmPassword"
@@ -242,9 +234,8 @@ export default function RegisterScreen() {
                 }}
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    className={`input-field ${
-                      errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    mode="outlined"
+                    label="Confirm Password"
                     placeholder="Confirm your password"
                     value={value}
                     onChangeText={onChange}
@@ -252,63 +243,65 @@ export default function RegisterScreen() {
                     secureTextEntry
                     autoCapitalize="none"
                     autoCorrect={false}
+                    error={!!errors.confirmPassword}
+                    left={<TextInput.Icon icon="lock-check" />}
+                    right={<TextInput.Icon icon="eye" />}
                   />
                 )}
               />
               {errors.confirmPassword && (
-                <Text className="text-red-500 text-sm mt-1">
+                <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: -8 }}>
                   {errors.confirmPassword.message}
                 </Text>
               )}
-            </View>
 
-            {/* Password Requirements */}
-            <View className="bg-blue-50 p-4 rounded-lg">
-              <Text className="text-sm font-medium text-blue-800 mb-2">
-                Password Requirements:
-              </Text>
-              <Text className="text-xs text-blue-700">
-                • At least 8 characters long{"\n"}
-                • Contains uppercase and lowercase letters{"\n"}
-                • Contains at least one number
-              </Text>
-            </View>
-
-            {/* Sign Up Button */}
-            <TouchableOpacity
-              className="btn-primary"
-              onPress={handleSubmit(onSubmit)}
-              disabled={isLoading}
-            >
-              <Text className="text-white text-base font-semibold text-center">
-                {isLoading ? 'Creating Account...' : 'Create Account'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Terms and Privacy */}
-            <Text className="text-xs text-gray-500 text-center leading-4">
-              By creating an account, you agree to our Terms of Service and Privacy Policy
-            </Text>
-
-            {/* Divider */}
-            <View className="flex-row items-center my-6">
-              <View className="flex-1 h-px bg-gray-300" />
-              <Text className="mx-4 text-gray-500 text-sm">or</Text>
-              <View className="flex-1 h-px bg-gray-300" />
-            </View>
-
-            {/* Sign In Link */}
-            <View className="flex-row justify-center">
-              <Text className="text-gray-600 text-sm">
-                Already have an account?{' '}
-              </Text>
-              <TouchableOpacity onPress={handleSignIn}>
-                <Text className="text-primary-600 text-sm font-medium">
-                  Sign in
+              {/* Password Requirements */}
+              <Surface style={{ padding: 16, marginVertical: 8, backgroundColor: theme.colors.primaryContainer, borderRadius: 8 }}>
+                <Text variant="titleSmall" style={{ color: theme.colors.onPrimaryContainer, marginBottom: 8 }}>
+                  Password Requirements:
                 </Text>
-              </TouchableOpacity>
+                <Text variant="bodySmall" style={{ color: theme.colors.onPrimaryContainer }}>
+                  • At least 8 characters long{"\n"}
+                  • Contains uppercase and lowercase letters{"\n"}
+                  • Contains at least one number
+                </Text>
+              </Surface>
+
+              {/* Sign Up Button */}
+              <Button
+                mode="contained"
+                onPress={handleSubmit(onSubmit)}
+                disabled={isLoading}
+                loading={isLoading}
+                style={{ marginVertical: 8 }}
+                contentStyle={{ paddingVertical: 8 }}
+              >
+                {isLoading ? 'Creating Account...' : 'Create Account'}
+              </Button>
+
+              {/* Terms and Privacy */}
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginVertical: 8 }}>
+                By creating an account, you agree to our Terms of Service and Privacy Policy
+              </Text>
+
+              {/* Divider */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 24 }}>
+                <Divider style={{ flex: 1 }} />
+                <Text variant="bodyMedium" style={{ marginHorizontal: 16, color: theme.colors.onSurfaceVariant }}>or</Text>
+                <Divider style={{ flex: 1 }} />
+              </View>
+
+              {/* Sign In Link */}
+              <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                  Already have an account?{' '}
+                </Text>
+                <Button mode="text" onPress={handleSignIn} compact>
+                  Sign in
+                </Button>
+              </View>
             </View>
-          </View>
+          </Surface>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

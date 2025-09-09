@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
+import {
+  Text,
+  TextInput,
+  Button,
+  Surface,
+  Divider,
+  useTheme,
+} from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { signIn } from '../lib/supabase';
@@ -24,6 +29,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const theme = useTheme();
   
   const {
     control,
@@ -77,31 +83,28 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-gray-50"
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
     >
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
-        className="flex-1"
+        style={{ flex: 1 }}
       >
-        <View className="flex-1 justify-center px-6 py-12">
-          {/* Header */}
-          <View className="mb-8">
-            <Text className="text-3xl font-bold text-center text-gray-900 mb-2">
-              Welcome Back
-            </Text>
-            <Text className="text-base text-center text-gray-600">
-              Sign in to your DocsDrafter account
-            </Text>
-          </View>
-
-          {/* Login Form */}
-          <View className="space-y-6">
-            {/* Email Input */}
-            <View>
-              <Text className="text-sm font-medium text-gray-700 mb-2">
-                Email Address
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
+          <Surface style={{ padding: 24, borderRadius: 12, elevation: 2 }}>
+            {/* Header */}
+            <View style={{ marginBottom: 32, alignItems: 'center' }}>
+              <Text variant="headlineMedium" style={{ marginBottom: 8, textAlign: 'center' }}>
+                Welcome Back
               </Text>
+              <Text variant="bodyLarge" style={{ textAlign: 'center', color: theme.colors.onSurfaceVariant }}>
+                Sign in to your DocsDrafter account
+              </Text>
+            </View>
+
+            {/* Login Form */}
+            <View style={{ gap: 16 }}>
+              {/* Email Input */}
               <Controller
                 control={control}
                 name="email"
@@ -114,9 +117,8 @@ export default function LoginScreen() {
                 }}
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    className={`input-field ${
-                      errors.email ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    mode="outlined"
+                    label="Email Address"
                     placeholder="Enter your email"
                     value={value}
                     onChangeText={onChange}
@@ -124,21 +126,18 @@ export default function LoginScreen() {
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
+                    error={!!errors.email}
+                    left={<TextInput.Icon icon="email" />}
                   />
                 )}
               />
               {errors.email && (
-                <Text className="text-red-500 text-sm mt-1">
+                <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: -8 }}>
                   {errors.email.message}
                 </Text>
               )}
-            </View>
 
-            {/* Password Input */}
-            <View>
-              <Text className="text-sm font-medium text-gray-700 mb-2">
-                Password
-              </Text>
+              {/* Password Input */}
               <Controller
                 control={control}
                 name="password"
@@ -151,9 +150,8 @@ export default function LoginScreen() {
                 }}
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
-                    className={`input-field ${
-                      errors.password ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    mode="outlined"
+                    label="Password"
                     placeholder="Enter your password"
                     value={value}
                     onChangeText={onChange}
@@ -161,55 +159,62 @@ export default function LoginScreen() {
                     secureTextEntry
                     autoCapitalize="none"
                     autoCorrect={false}
+                    error={!!errors.password}
+                    left={<TextInput.Icon icon="lock" />}
+                    right={<TextInput.Icon icon="eye" />}
                   />
                 )}
               />
               {errors.password && (
-                <Text className="text-red-500 text-sm mt-1">
+                <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: -8 }}>
                   {errors.password.message}
                 </Text>
               )}
-            </View>
 
-            {/* Forgot Password Link */}
-            <View className="flex-row justify-end">
-              <TouchableOpacity onPress={handleForgotPassword}>
-                <Text className="text-primary-600 text-sm font-medium">
+              {/* Forgot Password Link */}
+              <View style={{ alignItems: 'flex-end' }}>
+                <Button mode="text" onPress={handleForgotPassword}>
                   Forgot your password?
-                </Text>
-              </TouchableOpacity>
-            </View>
+                </Button>
+              </View>
 
-            {/* Sign In Button */}
-            <TouchableOpacity
-              className="btn-primary"
-              onPress={handleSubmit(onSubmit)}
-              disabled={isLoading}
-            >
-              <Text className="text-white text-base font-semibold text-center">
+              {/* Sign In Button */}
+              <Button
+                mode="contained"
+                onPress={handleSubmit(onSubmit)}
+                disabled={isLoading}
+                loading={isLoading}
+                style={{ marginTop: 8 }}
+                contentStyle={{ paddingVertical: 8 }}
+              >
                 {isLoading ? 'Signing In...' : 'Sign In'}
-              </Text>
-            </TouchableOpacity>
+              </Button>
 
-            {/* Divider */}
-            <View className="flex-row items-center my-6">
-              <View className="flex-1 h-px bg-gray-300" />
-              <Text className="mx-4 text-gray-500 text-sm">or</Text>
-              <View className="flex-1 h-px bg-gray-300" />
-            </View>
-
-            {/* Sign Up Link */}
-            <View className="flex-row justify-center">
-              <Text className="text-gray-600 text-sm">
-                Don't have an account?{' '}
-              </Text>
-              <TouchableOpacity onPress={handleSignUp}>
-                <Text className="text-primary-600 text-sm font-medium">
-                  Sign up
+              {/* Divider */}
+              <View style={{ marginVertical: 24 }}>
+                <Divider />
+                <Text variant="bodyMedium" style={{ 
+                  textAlign: 'center', 
+                  marginTop: -12, 
+                  backgroundColor: theme.colors.surface, 
+                  paddingHorizontal: 16,
+                  color: theme.colors.onSurfaceVariant 
+                }}>
+                  or
                 </Text>
-              </TouchableOpacity>
+              </View>
+
+              {/* Sign Up Link */}
+              <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                  Don't have an account?{' '}
+                </Text>
+                <Button mode="text" onPress={handleSignUp} compact>
+                  Sign up
+                </Button>
+              </View>
             </View>
-          </View>
+          </Surface>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

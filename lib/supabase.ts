@@ -64,6 +64,7 @@ export interface Database {
           json_schema: any;
           description: string | null;
           created_at: string;
+          metadata: any;
         };
         Insert: {
           name: string;
@@ -80,32 +81,22 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          template_id: string;
-          title: string;
-          file_path: string;
-          file_type: 'PDF' | 'DOCX';
-          status: 'pending' | 'completed' | 'failed';
-          metadata: any;
+          template_name: string;
+          storage_path: string;
+          file_type: string;
           created_at: string;
-          updated_at: string;
         };
         Insert: {
           id?: string;
           user_id: string;
-          template_id: string;
-          title: string;
-          file_path: string;
-          file_type: 'PDF' | 'DOCX';
-          status?: 'pending' | 'completed' | 'failed';
-          metadata?: any;
+          template_name: string;
+          storage_path: string;
+          file_type: string;
         };
         Update: {
-          title?: string;
-          file_path?: string;
-          file_type?: 'PDF' | 'DOCX';
-          status?: 'pending' | 'completed' | 'failed';
-          metadata?: any;
-          updated_at?: string;
+          template_name?: string;
+          storage_path?: string;
+          file_type?: string;
         };
       };
     };
@@ -300,14 +291,56 @@ export const generateDocument = async (
   userInputs: DocumentFormData, 
   fileType: 'PDF' | 'DOCX' = 'PDF'
 ) => {
-  const { data, error } = await supabase.functions.invoke('generate-document', {
-    body: {
+  try {
+    console.log('Calling Edge Function with:', {
       template_id: templateId,
       user_inputs: userInputs,
       file_type: fileType,
-    },
-  });
-  return { data, error };
+    });
+    
+    const { data, error } = await supabase.functions.invoke('generate-document', {
+      body: {
+        template_id: templateId,
+        user_inputs: userInputs,
+        file_type: fileType,
+      },
+    });
+    
+    if (error) {
+      console.error('Edge Function Error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        status: error.status,
+        statusText: error.statusText,
+        context: error.context
+      });
+      
+      // Provide more specific error messages
+      if (error.message?.includes('non-2xx status code')) {
+        return {
+          data: null,
+          error: {
+            ...error,
+            message: 'Document generation service is currently unavailable. This may be due to missing environment variables or service configuration issues. Please contact support.',
+            userFriendly: true
+          }
+        };
+      }
+    }
+    
+    console.log('Edge Function Response:', data);
+    return { data, error };
+  } catch (err) {
+    console.error('Unexpected error in generateDocument:', err);
+    return {
+      data: null,
+      error: {
+        message: 'An unexpected error occurred during document generation. Please try again.',
+        originalError: err,
+        userFriendly: true
+      }
+    };
+  }
 };
 
 // Enhanced document management functions
@@ -367,29 +400,7 @@ export const deleteDocumentComplete = async (documentId: string) => {
   return { error: dbError };
 };
 
-// Document status update
-export const updateDocumentStatus = async (
-  documentId: string, 
-  status: 'pending' | 'completed' | 'failed',
-  metadata?: any
-) => {
-  const updates: Database['public']['Tables']['documents']['Update'] = {
-    status,
-    updated_at: new Date().toISOString(),
-  };
-  
-  if (metadata) {
-    updates.metadata = metadata;
-  }
-
-  const { data, error } = await supabase
-    .from('documents')
-    .update(updates)
-    .eq('id', documentId)
-    .select()
-    .single();
-  return { data, error };
-};
+// Document status update function removed - status field not in schema
 
 // Get documents with template information
 export const getUserDocumentsWithTemplates = async (userId: string) => {
@@ -408,28 +419,9 @@ export const getUserDocumentsWithTemplates = async (userId: string) => {
   return { data, error };
 };
 
-// Filter documents by status
-export const getUserDocumentsByStatus = async (
-  userId: string, 
-  status: 'pending' | 'completed' | 'failed'
-) => {
-  const { data, error } = await supabase
-    .from('documents')
-    .select(`
-      *,
-      templates (
-        id,
-        name,
-        description
-      )
-    `)
-    .eq('user_id', userId)
-    .eq('status', status)
-    .order('created_at', { ascending: false });
-  return { data, error };
-};
+// Filter documents by status function removed - status field not in schema
 
-// Search documents by title
+// Search documents by template name
 export const searchUserDocuments = async (userId: string, searchTerm: string) => {
   const { data, error } = await supabase
     .from('documents')
@@ -442,7 +434,7 @@ export const searchUserDocuments = async (userId: string, searchTerm: string) =>
       )
     `)
     .eq('user_id', userId)
-    .ilike('title', `%${searchTerm}%`)
+    .ilike('template_name', `%${searchTerm}%`)
     .order('created_at', { ascending: false });
   return { data, error };
 };

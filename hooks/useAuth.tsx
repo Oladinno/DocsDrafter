@@ -7,6 +7,7 @@ import {
   createUserProfile,
   updateUserProfile,
   hasRole as checkUserRole,
+  signOut as supabaseSignOut,
   UserProfile,
   UserRole,
 } from '../lib/supabase';

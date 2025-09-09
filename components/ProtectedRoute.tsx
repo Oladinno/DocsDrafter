@@ -21,6 +21,12 @@ export function ProtectedRoute({
   const router = useRouter();
   const { isAuthenticated, loading, hasRole, user, role } = useAuth();
 
+  React.useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      router.replace(fallbackRoute);
+    }
+  }, [isAuthenticated, loading, router, fallbackRoute]);
+
   // Show loading while checking authentication
   if (loading) {
     return <LoadingSpinner message={loadingMessage} />;
@@ -28,10 +34,6 @@ export function ProtectedRoute({
 
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
-    React.useEffect(() => {
-      router.replace(fallbackRoute);
-    }, [router, fallbackRoute]);
-    
     return <LoadingSpinner message="Redirecting to login..." />;
   }
 

@@ -11,6 +11,18 @@ import { useForm, Controller, FieldValues } from 'react-hook-form';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useState } from 'react';
+import {
+  TextInput as PaperTextInput,
+  Button,
+  Card,
+  Text as PaperText,
+  HelperText,
+  useTheme,
+  Surface,
+  Menu,
+  Divider,
+  IconButton,
+} from 'react-native-paper';
 
 interface JSONSchemaProperty {
   type: string;
@@ -49,8 +61,11 @@ const FormField: React.FC<FormFieldProps> = ({
   errors,
   required,
 }) => {
+  const paperTheme = useTheme();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState({ x: 0, y: 0 });
 
   const renderField = () => {
     switch (property.type) {
@@ -63,14 +78,21 @@ const FormField: React.FC<FormFieldProps> = ({
               rules={{ required: required ? `${property.title || name} is required` : false }}
               render={({ field: { onChange, value } }) => (
                 <View>
-                  <TouchableOpacity
-                    className="border border-gray-300 rounded-lg px-3 py-3 bg-white"
-                    onPress={() => setShowDatePicker(true)}
-                  >
-                    <Text className={value ? 'text-gray-900' : 'text-gray-500'}>
-                      {value ? new Date(value).toLocaleDateString() : 'Select date'}
-                    </Text>
-                  </TouchableOpacity>
+                  <PaperTextInput
+                    mode="outlined"
+                    label={property.title || name}
+                    value={value ? new Date(value).toLocaleDateString() : ''}
+                    placeholder="Select date"
+                    editable={false}
+                    right={
+                      <PaperTextInput.Icon 
+                        icon="calendar" 
+                        onPress={() => setShowDatePicker(true)}
+                      />
+                    }
+                    onPressIn={() => setShowDatePicker(true)}
+                    error={!!errors[name]}
+                  />
                   {showDatePicker && (
                     <DateTimePicker
                       value={selectedDate}
@@ -98,18 +120,38 @@ const FormField: React.FC<FormFieldProps> = ({
               control={control}
               rules={{ required: required ? `${property.title || name} is required` : false }}
               render={({ field: { onChange, value } }) => (
-                <View className="border border-gray-300 rounded-lg bg-white">
-                  <Picker
-                    selectedValue={value}
-                    onValueChange={onChange}
-                    style={{ height: 50 }}
-                  >
-                    <Picker.Item label="Select an option" value="" />
-                    {property.enum!.map((option, index) => (
-                      <Picker.Item key={index} label={option} value={option} />
-                    ))}
-                  </Picker>
-                </View>
+                <Menu
+                  visible={menuVisible}
+                  onDismiss={() => setMenuVisible(false)}
+                  anchor={
+                    <PaperTextInput
+                      mode="outlined"
+                      label={property.title || name}
+                      value={value || ''}
+                      placeholder="Select an option"
+                      editable={false}
+                      right={
+                        <PaperTextInput.Icon 
+                          icon="chevron-down" 
+                          onPress={() => setMenuVisible(true)}
+                        />
+                      }
+                      onPressIn={() => setMenuVisible(true)}
+                      error={!!errors[name]}
+                    />
+                  }
+                >
+                  {property.enum!.map((option, index) => (
+                    <Menu.Item
+                      key={index}
+                      title={option}
+                      onPress={() => {
+                        onChange(option);
+                        setMenuVisible(false);
+                      }}
+                    />
+                  ))}
+                </Menu>
               )}
             />
           );
@@ -121,21 +163,23 @@ const FormField: React.FC<FormFieldProps> = ({
             control={control}
             rules={{ required: required ? `${property.title || name} is required` : false }}
             render={({ field: { onChange, onBlur, value } }) => (
-              <TextInput
-                className="border border-gray-300 rounded-lg px-3 py-3 bg-white text-gray-900"
+              <PaperTextInput
+                mode="outlined"
+                label={property.title || name}
                 placeholder={`Enter ${property.title || name}`}
-                value={value}
+                value={value || ''}
                 onChangeText={onChange}
                 onBlur={onBlur}
                 multiline={name.includes('body') || name.includes('content')}
                 numberOfLines={name.includes('body') || name.includes('content') ? 4 : 1}
-                textAlignVertical={name.includes('body') || name.includes('content') ? 'top' : 'center'}
+                error={!!errors[name]}
               />
             )}
           />
         );
         
       case 'number':
+      case 'integer':
         return (
           <Controller
             name={name}
@@ -143,18 +187,20 @@ const FormField: React.FC<FormFieldProps> = ({
             rules={{ 
               required: required ? `${property.title || name} is required` : false,
               pattern: {
-                value: /^[0-9]+(\.[0-9]+)?$/,
+                value: /^\d+$/,
                 message: 'Please enter a valid number'
               }
             }}
             render={({ field: { onChange, onBlur, value } }) => (
-              <TextInput
-                className="border border-gray-300 rounded-lg px-3 py-3 bg-white text-gray-900"
+              <PaperTextInput
+                mode="outlined"
+                label={property.title || name}
                 placeholder={`Enter ${property.title || name}`}
-                value={value?.toString()}
-                onChangeText={(text) => onChange(parseFloat(text) || 0)}
+                value={value || ''}
+                onChangeText={onChange}
                 onBlur={onBlur}
                 keyboardType="numeric"
+                error={!!errors[name]}
               />
             )}
           />
@@ -167,16 +213,30 @@ const FormField: React.FC<FormFieldProps> = ({
               name={name}
               control={control}
               rules={{ required: required ? `${property.title || name} is required` : false }}
-              render={({ field: { onChange, value } }) => (
-                <TextInput
-                  className="border border-gray-300 rounded-lg px-3 py-3 bg-white text-gray-900"
-                  placeholder={`Enter ${property.title || name} (comma-separated)`}
-                  value={Array.isArray(value) ? value.join(', ') : value}
-                  onChangeText={(text) => onChange(text.split(',').map(item => item.trim()))}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
+              render={({ field: { onChange, onBlur, value } }) => (
+                <View>
+                  <PaperTextInput
+                    mode="outlined"
+                    label={property.title || name}
+                    placeholder={`Enter ${property.title || name} (JSON format or comma-separated)`}
+                    value={Array.isArray(value) ? value.join(', ') : value || ''}
+                    onChangeText={(text) => {
+                      try {
+                        const parsed = JSON.parse(text);
+                        onChange(parsed);
+                      } catch {
+                        onChange(text.split(',').map(item => item.trim()));
+                      }
+                    }}
+                    onBlur={onBlur}
+                    multiline
+                    numberOfLines={3}
+                    error={!!errors[name]}
+                  />
+                  <HelperText type="info">
+                    Enter as JSON array or comma-separated values
+                  </HelperText>
+                </View>
               )}
             />
           );
@@ -224,12 +284,14 @@ const FormField: React.FC<FormFieldProps> = ({
             control={control}
             rules={{ required: required ? `${property.title || name} is required` : false }}
             render={({ field: { onChange, onBlur, value } }) => (
-              <TextInput
-                className="border border-gray-300 rounded-lg px-3 py-3 bg-white text-gray-900"
+              <PaperTextInput
+                mode="outlined"
+                label={property.title || name}
                 placeholder={`Enter ${property.title || name}`}
-                value={value}
+                value={value || ''}
                 onChangeText={onChange}
                 onBlur={onBlur}
+                error={!!errors[name]}
               />
             )}
           />
@@ -238,16 +300,12 @@ const FormField: React.FC<FormFieldProps> = ({
   };
 
   return (
-    <View className="mb-4">
-      <Text className="text-sm font-medium text-gray-700 mb-2">
-        {property.title || name}
-        {required && <Text className="text-red-500"> *</Text>}
-      </Text>
+    <View style={{ marginBottom: 16 }}>
       {renderField()}
       {errors[name] && (
-        <Text className="text-red-500 text-sm mt-1">
-          {errors[name].message}
-        </Text>
+        <HelperText type="error" visible={!!errors[name]}>
+          {errors[name]?.message}
+        </HelperText>
       )}
     </View>
   );
@@ -293,8 +351,8 @@ const DynamicFormGenerator: React.FC<DynamicFormGeneratorProps> = ({
   };
 
   return (
-    <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-      <View className="p-4">
+    <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+      <View style={{ padding: 16 }}>
         {Object.entries(schema.properties).map(([fieldName, property]) => (
           <FormField
             key={fieldName}
@@ -306,29 +364,30 @@ const DynamicFormGenerator: React.FC<DynamicFormGeneratorProps> = ({
           />
         ))}
         
-        <View className="flex-row space-x-3 mt-6">
-          <TouchableOpacity
-            className="flex-1 bg-gray-200 py-3 rounded-lg"
-            onPress={handleReset}
-            disabled={loading}
-          >
-            <Text className="text-gray-700 font-medium text-center">
+        <Surface style={{ padding: 16, marginTop: 16, borderRadius: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Button
+              mode="outlined"
+              onPress={handleReset}
+              disabled={loading}
+              style={{ flex: 1 }}
+              icon="refresh"
+            >
               Reset
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            className={`flex-1 py-3 rounded-lg ${
-              loading ? 'bg-blue-300' : 'bg-blue-500'
-            }`}
-            onPress={handleSubmit(handleFormSubmit)}
-            disabled={loading}
-          >
-            <Text className="text-white font-medium text-center">
-              {loading ? 'Generating...' : 'Generate Document'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+            </Button>
+            
+            <Button
+                mode="contained"
+                onPress={handleSubmit(onSubmit)}
+                disabled={loading}
+                loading={loading}
+                style={{ flex: 1 }}
+                icon="file-document"
+              >
+                {loading ? 'Generating...' : 'Generate Document'}
+              </Button>
+          </View>
+        </Surface>
       </View>
     </ScrollView>
   );

@@ -51,7 +51,13 @@ CREATE POLICY "Users can update own profile" ON public.profiles
 
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 CREATE POLICY "Users can insert own profile" ON public.profiles
-    FOR INSERT WITH CHECK (auth.uid() = id);
+    FOR INSERT WITH CHECK (
+        -- Allow users to insert their own profile
+        auth.uid() = id
+        OR
+        -- Allow inserts when there's no authenticated user (service context for triggers)
+        auth.uid() IS NULL
+    );
 
 -- RLS Policies for templates table
 -- All authenticated users can view templates (public templates)
@@ -93,9 +99,20 @@ DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- Insert user profile with error handling
     INSERT INTO public.profiles (id, email, role, full_name)
-    VALUES (NEW.id, NEW.email, 'user', COALESCE(NEW.raw_user_meta_data->>'full_name', ''));
+    VALUES (
+        NEW.id, 
+        NEW.email, 
+        'user', 
+        COALESCE(NEW.raw_user_meta_data->>'full_name', '')
+    );
     RETURN NEW;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Log the error and re-throw it to notify the caller
+        RAISE WARNING 'Failed to create user profile for %: %', NEW.id, SQLERRM;
+        RAISE;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

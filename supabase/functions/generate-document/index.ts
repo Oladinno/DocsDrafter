@@ -1,5 +1,5 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.0';
 import { PDFDocument, rgb, StandardFonts } from 'https://esm.sh/pdf-lib@1.17.1';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'https://esm.sh/docx@8.2.2';
 
@@ -22,7 +22,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -30,9 +30,26 @@ serve(async (req) => {
 
   try {
     // Initialize Supabase client
+    const supabaseUrl = process.env.SUPABASE_URL ?? '';
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? '';
+    
+    // Debug logging for environment variables
+    console.log('SUPABASE_URL:', supabaseUrl ? 'Set' : 'Missing');
+    console.log('SUPABASE_ANON_KEY:', supabaseAnonKey ? 'Set' : 'Missing');
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return new Response(
+        JSON.stringify({ error: 'Missing Supabase environment variables' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+    
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      supabaseUrl,
+      supabaseAnonKey,
       {
         global: {
           headers: { Authorization: req.headers.get('Authorization')! },
@@ -51,6 +68,45 @@ serve(async (req) => {
         JSON.stringify({ error: 'Unauthorized' }),
         {
           status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Ensure user profile exists (create if missing)
+    const { data: profile, error: profileError } = await supabaseClient
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError && profileError.code === 'PGRST116') {
+      // Profile doesn't exist, create it
+      const { error: createProfileError } = await supabaseClient
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email || '',
+          role: 'user',
+          full_name: user.user_metadata?.full_name || ''
+        });
+      
+      if (createProfileError) {
+        console.error('Failed to create user profile:', createProfileError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to create user profile' }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    } else if (profileError) {
+      console.error('Profile lookup error:', profileError);
+      return new Response(
+        JSON.stringify({ error: 'Profile lookup failed' }),
+        {
+          status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
@@ -144,16 +200,9 @@ serve(async (req) => {
       .insert({
         id: documentId,
         user_id: user.id,
-        template_id: template_id,
-        title: `${template.name} - ${new Date().toLocaleDateString()}`,
-        file_path: storagePath,
-        file_type: file_type,
-        status: 'completed',
-        metadata: {
-          template_name: template.name,
-          user_inputs: user_inputs,
-          generated_at: new Date().toISOString()
-        }
+        template_name: template.name,
+        storage_path: storagePath,
+        file_type: file_type
       })
       .select()
       .single();
@@ -203,8 +252,17 @@ function mergeTemplateWithInputs(
   template: any,
   userInputs: Record<string, any>
 ): Record<string, any> {
-  // Parse the template's JSON schema to understand the structure
-  const schema = JSON.parse(template.json_schema);
+  // Handle the template's JSON schema - it might already be parsed or need parsing
+  let schema;
+  try {
+    schema = typeof template.json_schema === 'string' 
+      ? JSON.parse(template.json_schema) 
+      : template.json_schema;
+  } catch (error) {
+    console.error('Error parsing template schema:', error);
+    // Fallback to empty schema if parsing fails
+    schema = { properties: {} };
+  }
   const content: Record<string, any> = {};
 
   // Process each field in the user inputs according to the schema

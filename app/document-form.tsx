@@ -11,16 +11,80 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FieldValues } from 'react-hook-form';
+import {
+  Surface,
+  Appbar,
+  Card,
+  Button,
+  Text as PaperText,
+  Portal,
+  Modal,
+  ActivityIndicator as PaperActivityIndicator,
+  useTheme,
+  SegmentedButtons,
+  Snackbar,
+} from 'react-native-paper';
 import DynamicFormGenerator from '../components/DynamicFormGenerator';
-import { generateDocumentWithTracking, DocumentFormData } from '../lib/supabase';
+import { useDocumentGenerator } from '../hooks/useDocumentGenerator';
 import { useAuth } from '../hooks/useAuth';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { useResponsive } from '../src/hooks/useResponsive';
 
 interface JSONSchema {
   type: string;
   properties: { [key: string]: any };
   required?: string[];
 }
+
+interface FileTypeSelectorProps {
+  selectedFileType: 'pdf' | 'docx';
+  setSelectedFileType: (fileType: 'pdf' | 'docx') => void;
+  loading: boolean;
+}
+
+const FileTypeSelector: React.FC<FileTypeSelectorProps> = ({ selectedFileType, setSelectedFileType, loading }) => {
+  const responsive = useResponsive();
+  const paperTheme = useTheme();
+
+  return (
+    <Card style={{ margin: responsive.spacing.md, marginBottom: responsive.spacing.md }}>
+      <Card.Content>
+        <PaperText variant="titleMedium" style={{ marginBottom: responsive.spacing.sm }}>
+          Select File Type
+        </PaperText>
+        <PaperText variant="bodyMedium" style={{ marginBottom: responsive.spacing.md, color: paperTheme.colors.onSurfaceVariant }}>
+          Choose the format for your generated document
+        </PaperText>
+        <View style={{ flexDirection: 'row' }}>
+          <Button
+            mode={selectedFileType === 'pdf' ? 'contained' : 'outlined'}
+            onPress={() => {
+              Alert.alert('PDF Button Pressed');
+              setSelectedFileType('pdf');
+            }}
+            icon="file-pdf-box"
+            disabled={loading}
+            style={{ flex: 1, marginRight: responsive.spacing.sm }}
+          >
+            PDF
+          </Button>
+          <Button
+            mode={selectedFileType === 'docx' ? 'contained' : 'outlined'}
+            onPress={() => {
+              Alert.alert('DOCX Button Pressed');
+              setSelectedFileType('docx');
+            }}
+            icon="file-word-box"
+            disabled={loading}
+            style={{ flex: 1 }}
+          >
+            DOCX
+          </Button>
+        </View>
+      </Card.Content>
+    </Card>
+  );
+};
 
 const DocumentFormScreen: React.FC = () => {
   const { templateId, templateName, templateSchema } = useLocalSearchParams<{
@@ -30,11 +94,14 @@ const DocumentFormScreen: React.FC = () => {
   }>();
   
   const { user } = useAuth();
+  const paperTheme = useTheme();
+  const responsive = useResponsive();
   const [schema, setSchema] = useState<JSONSchema | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { generate, loading, error: generationError } = useDocumentGenerator();
   const [initializing, setInitializing] = useState(true);
-  const [selectedFileType, setSelectedFileType] = useState<'PDF' | 'DOCX'>('PDF');
-  const [generationStatus, setGenerationStatus] = useState<string>('');
+  const [selectedFileType, setSelectedFileType] = useState<'pdf' | 'docx'>('pdf');
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   useEffect(() => {
     if (templateSchema) {
@@ -53,44 +120,25 @@ const DocumentFormScreen: React.FC = () => {
     setInitializing(false);
   }, [templateSchema]);
 
+  useEffect(() => {
+    if (generationError) {
+      setSnackbarMessage(generationError.message || 'An unexpected error occurred.');
+      setSnackbarVisible(true);
+    }
+  }, [generationError]);
+
   const handleFormSubmit = async (formData: FieldValues) => {
     if (!user || !templateId) {
       Alert.alert('Error', 'User not authenticated or template not found.');
       return;
     }
 
-    setLoading(true);
-    setGenerationStatus('Preparing document generation...');
-    
-    try {
-      // Generate document using enhanced Supabase Edge Function
-      const { data: generatedDoc, error: generateError } = await generateDocumentWithTracking(
-        templateId,
-        formData as DocumentFormData,
-        selectedFileType,
-        (status) => setGenerationStatus(status)
-      );
+    await generate({ id: templateId, name: templateName, json_schema: schema, description: '', created_at: '', metadata: {} }, formData, selectedFileType);
 
-      if (generateError) {
-        console.error('Error generating document:', generateError);
-        Alert.alert(
-          'Generation Error',
-          'Failed to generate document. Please try again.'
-        );
-        return;
-      }
-
-      if (!generatedDoc || !generatedDoc.document_id) {
-        Alert.alert(
-          'Generation Error',
-          'Document generation failed. Please try again.'
-        );
-        return;
-      }
-
+    if (!generationError) {
       Alert.alert(
         'Success',
-        `${selectedFileType} document generated successfully!`,
+        `${selectedFileType} document generated and saved!`,
         [
           {
             text: 'View Documents',
@@ -105,93 +153,12 @@ const DocumentFormScreen: React.FC = () => {
           },
         ]
       );
-    } catch (error) {
-      console.error('Error in document generation flow:', error);
-      Alert.alert(
-        'Error',
-        'An unexpected error occurred. Please try again.'
-      );
-    } finally {
-      setLoading(false);
-      setGenerationStatus('');
     }
   };
 
-  const FileTypeSelector = () => (
-    <View className="bg-white mx-4 mb-4 rounded-lg border border-gray-200">
-      <View className="p-4 border-b border-gray-200">
-        <Text className="text-lg font-semibold text-gray-900 mb-2">
-          Select File Type
-        </Text>
-        <Text className="text-sm text-gray-600">
-          Choose the format for your generated document
-        </Text>
-      </View>
-      <View className="p-4">
-        <View className="flex-row space-x-3">
-          <TouchableOpacity
-            className={`flex-1 p-4 rounded-lg border-2 ${
-              selectedFileType === 'PDF'
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-200 bg-gray-50'
-            }`}
-            onPress={() => setSelectedFileType('PDF')}
-            disabled={loading}
-          >
-            <View className="items-center">
-              <Ionicons
-                name="document-text"
-                size={32}
-                color={selectedFileType === 'PDF' ? '#3B82F6' : '#6B7280'}
-              />
-              <Text
-                className={`mt-2 font-medium ${
-                  selectedFileType === 'PDF' ? 'text-blue-600' : 'text-gray-600'
-                }`}
-              >
-                PDF
-              </Text>
-              <Text className="text-xs text-gray-500 text-center mt-1">
-                Portable Document Format
-              </Text>
-            </View>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            className={`flex-1 p-4 rounded-lg border-2 ${
-              selectedFileType === 'DOCX'
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-200 bg-gray-50'
-            }`}
-            onPress={() => setSelectedFileType('DOCX')}
-            disabled={loading}
-          >
-            <View className="items-center">
-              <Ionicons
-                name="document"
-                size={32}
-                color={selectedFileType === 'DOCX' ? '#3B82F6' : '#6B7280'}
-              />
-              <Text
-                className={`mt-2 font-medium ${
-                  selectedFileType === 'DOCX' ? 'text-blue-600' : 'text-gray-600'
-                }`}
-              >
-                DOCX
-              </Text>
-              <Text className="text-xs text-gray-500 text-center mt-1">
-                Microsoft Word Document
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
-
   if (initializing) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
         <LoadingSpinner />
       </SafeAreaView>
     );
@@ -199,74 +166,65 @@ const DocumentFormScreen: React.FC = () => {
 
   if (!schema) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 justify-center items-center px-6">
-          <Ionicons name="alert-circle-outline" size={64} color="#EF4444" />
-          <Text className="text-lg font-medium text-gray-900 mt-4 mb-2">
+      <Surface style={{ flex: 1, backgroundColor: paperTheme.colors.background }}>
+        <Appbar.Header>
+          <Appbar.BackAction onPress={() => router.back()} />
+          <Appbar.Content title="Error" />
+        </Appbar.Header>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Ionicons name="alert-circle-outline" size={64} color={paperTheme.colors.error} />
+          <PaperText variant="headlineSmall" style={{ marginTop: 16, marginBottom: 8, textAlign: 'center' }}>
             Invalid Template
-          </Text>
-          <Text className="text-sm text-gray-600 text-center mb-6">
+          </PaperText>
+          <PaperText variant="bodyMedium" style={{ textAlign: 'center', marginBottom: 24, color: paperTheme.colors.onSurfaceVariant }}>
             The template schema could not be loaded. Please try selecting a different template.
-          </Text>
-          <TouchableOpacity
-            className="bg-blue-500 px-6 py-3 rounded-lg"
+          </PaperText>
+          <Button
+            mode="contained"
             onPress={() => router.back()}
+            icon="arrow-left"
           >
-            <Text className="text-white font-medium">Go Back</Text>
-          </TouchableOpacity>
+            Go Back
+          </Button>
         </View>
-      </SafeAreaView>
+      </Surface>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <Surface style={{ flex: 1, backgroundColor: paperTheme.colors.background }}>
       {/* Header */}
-      <View className="bg-white px-4 py-3 border-b border-gray-200">
-        <View className="flex-row items-center justify-between">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="p-2 -ml-2"
-            disabled={loading}
-          >
-            <Ionicons name="arrow-back" size={24} color="#374151" />
-          </TouchableOpacity>
-          <View className="flex-1 mx-4">
-            <Text className="text-lg font-semibold text-gray-900 text-center">
-              {templateName}
-            </Text>
-            <Text className="text-sm text-gray-600 text-center">
-              Fill out the form below
-            </Text>
-          </View>
-          <View className="w-8" />
-        </View>
-      </View>
+      <Appbar.Header>
+        <Appbar.BackAction onPress={() => router.back()} disabled={loading} />
+        <Appbar.Content 
+          title={templateName || 'Document Form'} 
+          subtitle="Fill out the form below"
+        />
+      </Appbar.Header>
 
-      {/* Loading Overlay */}
-      {loading && (
-        <View className="absolute inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-          <View className="bg-white rounded-lg p-6 items-center max-w-sm mx-4">
-            <ActivityIndicator size="large" color="#3B82F6" />
-            <Text className="text-gray-900 font-medium mt-4 text-center">
+      {/* Loading Modal */}
+      <Portal>
+        <Modal visible={loading} dismissable={false}>
+          <Card style={{ margin: 20, padding: 20, alignItems: 'center' }}>
+            <PaperActivityIndicator size="large" />
+            <PaperText variant="titleMedium" style={{ marginTop: 16, textAlign: 'center' }}>
               Generating {selectedFileType} Document...
-            </Text>
-            {generationStatus && (
-              <Text className="text-gray-600 text-sm mt-2 text-center">
-                {generationStatus}
-              </Text>
-            )}
-            <Text className="text-gray-500 text-xs mt-2 text-center">
+            </PaperText>
+            <PaperText variant="bodySmall" style={{ marginTop: 8, textAlign: 'center', color: paperTheme.colors.onSurfaceVariant }}>
               This may take a few moments
-            </Text>
-          </View>
-        </View>
-      )}
+            </PaperText>
+          </Card>
+        </Modal>
+      </Portal>
 
       {/* Content */}
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
         {/* File Type Selector */}
-        <FileTypeSelector />
+        <FileTypeSelector 
+          selectedFileType={selectedFileType}
+          setSelectedFileType={setSelectedFileType}
+          loading={loading}
+        />
         
         {/* Form */}
         <DynamicFormGenerator
@@ -275,7 +233,20 @@ const DocumentFormScreen: React.FC = () => {
           loading={loading}
         />
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Snackbar for error messages */}
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={4000}
+        action={{
+          label: 'Dismiss',
+          onPress: () => setSnackbarVisible(false),
+        }}
+      >
+        {snackbarMessage}
+      </Snackbar>
+    </Surface>
   );
 };
 

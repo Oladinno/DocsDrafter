@@ -1,21 +1,25 @@
 import { Stack } from 'expo-router';
 import { AuthProvider } from '../hooks/useAuth';
+import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
+import { useTheme as usePaperTheme } from 'react-native-paper';
 import '../global.css'; // NativeWind styles
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-export default function RootLayout() {
+function StackNavigator() {
+  const paperTheme = usePaperTheme();
+  
   return (
-    <AuthProvider>
-      <Stack
-        screenOptions={{
-          headerStyle: {
-            backgroundColor: '#f4f4f5',
-          },
-          headerTintColor: '#000',
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
-        }}
-      >
+    <Stack
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: paperTheme.colors.surface,
+        },
+        headerTintColor: paperTheme.colors.onSurface,
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+      }}
+    >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="register" options={{ headerShown: false }} />
@@ -27,6 +31,17 @@ export default function RootLayout() {
         <Stack.Screen name="new-document" options={{ headerShown: false }} />
         <Stack.Screen name="document-form" options={{ headerShown: false }} />
       </Stack>
-    </AuthProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <AuthProvider>
+          <StackNavigator />
+        </AuthProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

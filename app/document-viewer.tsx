@@ -1,39 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
-  Text,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
   Dimensions,
   Share,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Appbar, Button, Dialog, IconButton, Portal, Snackbar, Surface, Text, useTheme as usePaperTheme } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import Pdf from 'react-native-pdf';
+import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import { shareAsync, isAvailableAsync } from 'expo-sharing';
 import { getDocumentById, getDocumentDownloadUrl, deleteDocumentComplete } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import LoadingSpinner from '../components/LoadingSpinner';
+import { useResponsiveStyles, useResponsiveLayout } from '../src/hooks/useResponsive';
+import type { Document } from '../lib/supabase';
 
 interface DocumentViewerParams {
   documentId: string;
   title?: string;
 }
 
-export default function DocumentViewerScreen() {
+function DocumentViewerScreen() {
   const { documentId, title } = useLocalSearchParams<DocumentViewerParams>();
   const router = useRouter();
   const { user } = useAuth();
-  const [document, setDocument] = useState<any>(null);
+  const paperTheme = usePaperTheme();
+  const responsive = useResponsiveStyles();
+  const layout = useResponsiveLayout();
+  const [document, setDocument] = useState<Document | null>(null);
   const [pdfUri, setPdfUri] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string>('');
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string>('');
 
   const screenData = Dimensions.get('window');
 
@@ -61,7 +64,7 @@ export default function DocumentViewerScreen() {
       setDocument(docData);
 
       // Get download URL for PDF viewing
-      const downloadUrl = await getDocumentDownloadUrl(docData.file_path);
+      const downloadUrl = await getDocumentDownloadUrl(docData.storage_path);
       if (!downloadUrl) {
         setError('Unable to load document');
         return;
@@ -79,14 +82,16 @@ export default function DocumentViewerScreen() {
   const handleDownload = async () => {
     try {
       setDownloading(true);
+      setError('');
 
       if (!document || !pdfUri) {
-        Alert.alert('Error', 'Document not available for download');
+        setError('Document not available for download');
+        setSnackbarVisible(true);
         return;
       }
 
       // Create filename with proper extension
-      const fileName = `${document.title.replace(/[^a-zA-Z0-9]/g, '_')}.${document.file_type.toLowerCase()}`;
+      const fileName = `${document.template_name.replace(/[^a-zA-Z0-9]/g, '_')}.${document.file_type.toLowerCase()}`;
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
 
       // Download the file
@@ -94,68 +99,57 @@ export default function DocumentViewerScreen() {
 
       if (downloadResult.status === 200) {
         // Check if sharing is available
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(downloadResult.uri, {
+        if (await isAvailableAsync()) {
+          await shareAsync(downloadResult.uri, {
             mimeType: document.file_type === 'PDF' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            dialogTitle: `Save ${document.title}`,
+            dialogTitle: `Save ${document.template_name}`,
           });
+          setSuccessMessage('Document downloaded and shared successfully');
         } else {
-          Alert.alert(
-            'Download Complete',
-            `File saved to: ${downloadResult.uri}`,
-            [{ text: 'OK' }]
-          );
+          setSuccessMessage(`File saved to: ${downloadResult.uri}`);
         }
+        setSnackbarVisible(true);
       } else {
         throw new Error('Download failed');
       }
     } catch (err: any) {
       console.error('Error downloading document:', err);
-      Alert.alert('Download Error', err.message || 'Failed to download document');
+      setError(err.message || 'Failed to download document');
+      setSnackbarVisible(true);
     } finally {
       setDownloading(false);
     }
   };
 
   const handleDelete = async () => {
-    Alert.alert(
-      'Delete Document',
-      `Are you sure you want to delete "${document?.title || 'this document'}"? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: confirmDelete,
-        },
-      ]
-    );
+    setDeleteDialogVisible(true);
   };
 
   const confirmDelete = async () => {
     try {
       setDeleting(true);
+      setDeleteDialogVisible(false);
+      setError('');
 
       if (!document) {
-        Alert.alert('Error', 'Document not found');
+        setError('Document not found');
+        setSnackbarVisible(true);
         return;
       }
 
       await deleteDocumentComplete(document.id);
 
-      Alert.alert(
-        'Document Deleted',
-        'The document has been successfully deleted.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
-      );
+      setSuccessMessage('The document has been successfully deleted.');
+      setSnackbarVisible(true);
+      
+      // Navigate back after a short delay
+      setTimeout(() => {
+        router.back();
+      }, 1500);
     } catch (err: any) {
       console.error('Error deleting document:', err);
-      Alert.alert('Delete Error', err.message || 'Failed to delete document');
+      setError(err.message || 'Failed to delete document');
+      setSnackbarVisible(true);
     } finally {
       setDeleting(false);
     }
@@ -164,189 +158,287 @@ export default function DocumentViewerScreen() {
   const handleShare = async () => {
     try {
       if (!pdfUri || !document) {
-        Alert.alert('Error', 'Document not available for sharing');
+        setError('Document not available for sharing');
+        setSnackbarVisible(true);
         return;
       }
 
       if (Platform.OS === 'ios') {
         await Share.share({
           url: pdfUri,
-          title: document.title,
+          title: document.template_name,
         });
       } else {
         await Share.share({
-          message: `Check out this document: ${document.title}`,
+          message: `Check out this document: ${document.template_name}`,
           url: pdfUri,
-          title: document.title,
+          title: document.template_name,
         });
       }
     } catch (err: any) {
       console.error('Error sharing document:', err);
-      Alert.alert('Share Error', 'Failed to share document');
+      setError('Failed to share document');
+      setSnackbarVisible(true);
     }
   };
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
-        <View className="flex-1 justify-center items-center">
-          <LoadingSpinner size="large" />
-          <Text className="text-gray-600 mt-4">Loading document...</Text>
+      <Surface style={{ flex: 1, backgroundColor: paperTheme.colors.background }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={paperTheme.colors.primary} />
+          <Text style={{ color: paperTheme.colors.onSurface, marginTop: 16 }}>Loading document...</Text>
         </View>
-      </SafeAreaView>
+      </Surface>
     );
   }
 
   if (error) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
-        <View className="flex-row items-center justify-between p-4 border-b border-gray-200">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="flex-row items-center"
-          >
-            <Ionicons name="arrow-back" size={24} color="#374151" />
-            <Text className="text-gray-700 font-medium ml-2">Back</Text>
-          </TouchableOpacity>
-        </View>
+      <Surface style={{ flex: 1, backgroundColor: paperTheme.colors.background }}>
+        <Appbar.Header>
+          <Appbar.BackAction onPress={() => router.back()} />
+          <Appbar.Content title="Error" />
+        </Appbar.Header>
         
-        <View className="flex-1 justify-center items-center px-6">
-          <Ionicons name="document-text-outline" size={64} color="#EF4444" />
-          <Text className="text-red-600 text-lg font-semibold mt-4 text-center">
-            Error Loading Document
-          </Text>
-          <Text className="text-gray-600 mt-2 text-center">{error}</Text>
-          <TouchableOpacity
-            onPress={loadDocument}
-            className="bg-blue-600 px-6 py-3 rounded-lg mt-6"
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Surface 
+            style={{ 
+              padding: 32, 
+              borderRadius: 16, 
+              alignItems: 'center',
+              backgroundColor: paperTheme.colors.errorContainer 
+            }}
           >
-            <Text className="text-white font-medium">Try Again</Text>
-          </TouchableOpacity>
+            <Text 
+              variant="headlineSmall" 
+              style={{ 
+                color: paperTheme.colors.onErrorContainer, 
+                textAlign: 'center',
+                marginBottom: 16 
+              }}
+            >
+              Error Loading Document
+            </Text>
+            <Text 
+              variant="bodyMedium" 
+              style={{ 
+                color: paperTheme.colors.onErrorContainer, 
+                textAlign: 'center',
+                marginBottom: 24 
+              }}
+            >
+              {error}
+            </Text>
+            <Button 
+              mode="contained" 
+              onPress={loadDocument}
+              style={{ backgroundColor: paperTheme.colors.primary }}
+            >
+              Try Again
+            </Button>
+          </Surface>
         </View>
-      </SafeAreaView>
+      </Surface>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      {/* Header */}
-      <View className="flex-row items-center justify-between p-4 border-b border-gray-200">
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="flex-row items-center flex-1"
-        >
-          <Ionicons name="arrow-back" size={24} color="#374151" />
-          <Text className="text-gray-700 font-medium ml-2 flex-1" numberOfLines={1}>
-            {document?.title || title || 'Document'}
-          </Text>
-        </TouchableOpacity>
+    <SafeAreaView style={responsive.containerStyle}>
+      <Surface style={[responsive.containerStyle, { backgroundColor: paperTheme.colors.background }]}>
+        <Appbar.Header>
+          <Appbar.BackAction onPress={() => router.back()} />
+          <Appbar.Content 
+            title={document?.template_name || title || 'Document'} 
+            titleStyle={{ fontSize: 20, fontWeight: 'bold' }}
+            subtitle={document ? `${document.file_type} • ${new Date(document.created_at).toLocaleDateString()}` : ''}
+          />
+        </Appbar.Header>
+      
+      <Surface style={{ 
+        padding: responsive.spacing.md, 
+        backgroundColor: paperTheme.colors.surface 
+      }}>
         
-        <View className="flex-row items-center space-x-2">
-          <TouchableOpacity
+        {/* Action Buttons */}
+        <View style={{ 
+          flexDirection: layout.getFlexDirection('row'), 
+          gap: responsive.spacing.sm,
+          marginBottom: responsive.spacing.md,
+          flexWrap: responsive.isPhone ? 'wrap' : 'nowrap'
+        }}>
+          <Button
+            mode="outlined"
             onPress={handleShare}
-            className="p-2"
             disabled={!pdfUri}
+            icon="share"
+            style={{ 
+              flex: responsive.isPhone ? undefined : 1,
+              minWidth: responsive.isPhone ? '30%' : undefined
+            }}
+            compact={responsive.isPhone}
           >
-            <Ionicons name="share-outline" size={24} color="#374151" />
-          </TouchableOpacity>
+            Share
+          </Button>
           
-          <TouchableOpacity
+          <Button
+            mode="contained"
             onPress={handleDownload}
-            className="p-2"
             disabled={downloading || !pdfUri}
+            loading={downloading}
+            icon={downloading ? undefined : "download"}
+            style={{ 
+              flex: responsive.isPhone ? undefined : 1,
+              minWidth: responsive.isPhone ? '30%' : undefined
+            }}
+            compact={responsive.isPhone}
           >
-            {downloading ? (
-              <ActivityIndicator size="small" color="#3B82F6" />
-            ) : (
-              <Ionicons name="download-outline" size={24} color="#374151" />
-            )}
-          </TouchableOpacity>
+            {downloading ? 'Downloading...' : 'Download'}
+          </Button>
           
-          <TouchableOpacity
+          <Button
+            mode="outlined"
             onPress={handleDelete}
-            className="p-2"
             disabled={deleting}
+            loading={deleting}
+            icon={deleting ? undefined : "delete"}
+            buttonColor={paperTheme.colors.errorContainer}
+            textColor={paperTheme.colors.onErrorContainer}
+            style={{ 
+              flex: responsive.isPhone ? undefined : 1,
+              minWidth: responsive.isPhone ? '30%' : undefined
+            }}
+            compact={responsive.isPhone}
           >
-            {deleting ? (
-              <ActivityIndicator size="small" color="#EF4444" />
-            ) : (
-              <Ionicons name="trash-outline" size={24} color="#EF4444" />
-            )}
-          </TouchableOpacity>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
         </View>
-      </View>
+      </Surface>
 
       {/* Document Info */}
       {document && (
-        <View className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-          <Text className="text-sm text-gray-600">
+        <Surface style={{ 
+          padding: responsive.spacing.sm, 
+          backgroundColor: paperTheme.colors.surfaceVariant 
+        }}>
+          <Text 
+            variant="bodySmall" 
+            style={{ color: paperTheme.colors.onSurfaceVariant }}
+          >
             {document.file_type} • Created {new Date(document.created_at).toLocaleDateString()}
           </Text>
-        </View>
+        </Surface>
       )}
 
       {/* PDF Viewer */}
       {pdfUri && document?.file_type === 'PDF' ? (
-        <View className="flex-1">
-          <Pdf
-            source={{ uri: pdfUri, cache: true }}
-            onLoadComplete={(numberOfPages) => {
-              console.log(`PDF loaded with ${numberOfPages} pages`);
-            }}
-            onPageChanged={(page, numberOfPages) => {
-              console.log(`Current page: ${page}/${numberOfPages}`);
-            }}
-            onError={(error) => {
-              console.error('PDF Error:', error);
-              setError('Failed to load PDF');
-            }}
+        <View style={{ flex: 1 }}>
+          <WebView
+            source={{ uri: pdfUri }}
             style={{
               flex: 1,
-              width: screenData.width,
-              height: screenData.height,
+              width: responsive.screenWidth,
+              height: responsive.screenHeight,
             }}
-            enablePaging={true}
-            horizontal={false}
-            spacing={10}
-            password=""
-            scale={1.0}
-            minScale={0.5}
-            maxScale={3.0}
-            renderActivityIndicator={() => (
-              <View className="flex-1 justify-center items-center">
-                <ActivityIndicator size="large" color="#3B82F6" />
-                <Text className="text-gray-600 mt-2">Loading PDF...</Text>
+            onError={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              console.error('WebView error:', nativeEvent);
+              setError('Failed to load PDF');
+              setSnackbarVisible(true);
+            }}
+            onLoadStart={() => console.log('PDF loading started')}
+            onLoadEnd={() => console.log('PDF loading completed')}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={paperTheme.colors.primary} />
+                <Text style={{ color: paperTheme.colors.onSurface, marginTop: responsive.spacing.xs }}>Loading PDF...</Text>
               </View>
             )}
           />
         </View>
       ) : (
-        <View className="flex-1 justify-center items-center px-6">
-          <Ionicons name="document-text-outline" size={64} color="#6B7280" />
-          <Text className="text-gray-700 text-lg font-semibold mt-4 text-center">
-            {document?.file_type === 'DOCX' ? 'Word Document' : 'Document'}
-          </Text>
-          <Text className="text-gray-600 mt-2 text-center">
-            {document?.file_type === 'DOCX'
-              ? 'Word documents cannot be viewed in-app. Use the download button to save and open with a compatible app.'
-              : 'This document type cannot be previewed in-app.'}
-          </Text>
-          <TouchableOpacity
-            onPress={handleDownload}
-            className="bg-blue-600 px-6 py-3 rounded-lg mt-6 flex-row items-center"
-            disabled={downloading}
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: responsive.spacing.lg }}>
+          <Surface 
+            style={{ 
+              padding: responsive.spacing.xl, 
+              borderRadius: responsive.spacing.md, 
+              alignItems: 'center',
+              backgroundColor: paperTheme.colors.surfaceVariant 
+            }}
           >
-            {downloading ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <Ionicons name="download-outline" size={20} color="white" />
-            )}
-            <Text className="text-white font-medium ml-2">
-              {downloading ? 'Downloading...' : 'Download Document'}
+            <Text 
+              variant="headlineSmall" 
+              style={{ 
+                color: paperTheme.colors.onSurfaceVariant, 
+                textAlign: 'center',
+                marginBottom: responsive.spacing.md 
+              }}
+            >
+              {document?.file_type === 'DOCX' ? 'Word Document' : 'Document'}
             </Text>
-          </TouchableOpacity>
+            <Text 
+              variant="bodyMedium" 
+              style={{ 
+                color: paperTheme.colors.onSurfaceVariant, 
+                textAlign: 'center',
+                marginBottom: responsive.spacing.lg,
+                paddingHorizontal: responsive.spacing.md 
+              }}
+            >
+              {document?.file_type === 'DOCX'
+                ? 'Word documents cannot be viewed in-app. Use the download button to save and open with a compatible app.'
+                : 'This document type cannot be previewed in-app.'}
+            </Text>
+            <Button 
+              mode="contained" 
+              onPress={handleDownload}
+              disabled={downloading}
+              loading={downloading}
+              icon={downloading ? undefined : "download"}
+            >
+              {downloading ? 'Downloading...' : 'Download Document'}
+            </Button>
+          </Surface>
         </View>
       )}
+      </Surface>
+
+      {/* Snackbar for messages */}
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={4000}
+        style={{
+          backgroundColor: error ? paperTheme.colors.errorContainer : paperTheme.colors.primaryContainer
+        }}
+      >
+        <Text style={{
+          color: error ? paperTheme.colors.onErrorContainer : paperTheme.colors.onPrimaryContainer
+        }}>
+          {error || successMessage}
+        </Text>
+      </Snackbar>
+
+      {/* Delete confirmation dialog */}
+      <Portal>
+        <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
+          <Dialog.Title>Delete Document</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">
+              Are you sure you want to delete "{document?.title || 'this document'}"? This action cannot be undone.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDeleteDialogVisible(false)}>Cancel</Button>
+            <Button onPress={confirmDelete} mode="contained" buttonColor={paperTheme.colors.error}>
+              Delete
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
+
+export default DocumentViewerScreen;

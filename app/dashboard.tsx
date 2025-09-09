@@ -1,40 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
-  Text,
-  TouchableOpacity,
   FlatList,
   Alert,
   RefreshControl,
-  TextInput,
-  ActivityIndicator,
 } from 'react-native';
+import {
+  Text,
+  Card,
+  Button,
+  IconButton,
+  Searchbar,
+  Surface,
+  Chip,
+  ActivityIndicator,
+  useTheme as usePaperTheme,
+  Appbar,
+  FAB,
+  Menu,
+} from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import { shareAsync } from 'expo-sharing';
 import { useAuth } from '../hooks/useAuth';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { ThemeToggle } from '../src/components/ThemeToggle';
+import { useResponsiveStyles, useResponsiveLayout } from '../src/hooks/useResponsive';
 import { 
   getUserDocuments, 
   deleteDocumentComplete, 
   getDocumentDownloadUrl 
 } from '../lib/supabase';
 
-// Document type based on the new schema
-interface Document {
-  id: string;
-  user_id: string;
-  template_id: string;
-  title: string;
-  file_path: string;
-  file_type: 'PDF' | 'DOCX';
-  status: string;
-  metadata?: any;
-  created_at: string;
-  updated_at: string;
-}
+// Import Document type from supabase lib
+import type { Document } from '../lib/supabase';
 
 interface DocumentItemProps {
   document: Document;
@@ -47,11 +48,15 @@ interface DocumentItemProps {
 function DocumentItem({ document, onView, onDownload, onDelete, onRefresh }: DocumentItemProps) {
   const [downloading, setDownloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const paperTheme = usePaperTheme();
+  const responsive = useResponsiveStyles();
+  const layout = useResponsiveLayout();
 
   const handleDelete = () => {
     Alert.alert(
       'Delete Document',
-      `Are you sure you want to delete "${document.title}"?`,
+      `Are you sure you want to delete "${document.template_name}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -76,104 +81,116 @@ function DocumentItem({ document, onView, onDownload, onDelete, onRefresh }: Doc
 
   const getFileTypeIcon = (fileType: string) => {
     switch (fileType.toLowerCase()) {
-      case 'pdf': return 'document-text';
-      case 'docx': return 'document';
-      default: return 'document-text';
+      case 'pdf': return 'file-pdf-box';
+      case 'docx': return 'file-word-box';
+      default: return 'file-document';
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return 'text-green-600';
-      case 'pending': return 'text-yellow-600';
-      case 'failed': return 'text-red-600';
-      default: return 'text-gray-600';
-    }
-  };
+  // Removed status-related functions since status field doesn't exist in schema
 
   return (
-    <View className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-200">
-      <View className="flex-row justify-between items-start mb-2">
-        <View className="flex-1 mr-3">
-          <View className="flex-row items-center mb-2">
-            <Ionicons 
-              name={getFileTypeIcon(document.file_type)} 
-              size={20} 
-              color="#6B7280" 
-              style={{ marginRight: 8 }}
-            />
-            <Text className="text-lg font-semibold text-gray-900 flex-1" numberOfLines={1}>
-              {document.title}
-            </Text>
-            <View className={`px-2 py-1 rounded-full ${
-              document.status === 'completed' ? 'bg-green-100' :
-              document.status === 'pending' ? 'bg-yellow-100' : 'bg-red-100'
-            }`}>
-              <Text className={`text-xs font-medium ${
-                document.status === 'completed' ? 'text-green-600' :
-                document.status === 'pending' ? 'text-yellow-600' : 'text-red-600'
-              }`}>
-                {document.status.charAt(0).toUpperCase() + document.status.slice(1)}
+    <Card style={[responsive.cardStyle, { marginBottom: responsive.spacing.md }]} mode="elevated">
+      <Card.Content>
+        <View style={{ 
+          flexDirection: layout.getFlexDirection(true), 
+          alignItems: responsive.isPhone ? 'flex-start' : 'center', 
+          justifyContent: 'space-between', 
+          marginBottom: responsive.spacing.md 
+        }}>
+          <View style={{ 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            flex: 1,
+            marginBottom: responsive.isPhone ? responsive.spacing.sm : 0
+          }}>
+            <Surface 
+              style={{ 
+                width: responsive.getIconSize('large') + 16, 
+                height: responsive.getIconSize('large') + 16, 
+                borderRadius: 12, 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                marginRight: responsive.spacing.md,
+                backgroundColor: paperTheme.colors.primaryContainer
+              }}
+            >
+              <IconButton
+                icon={getFileTypeIcon(document.file_type)}
+                size={responsive.getIconSize('medium')}
+                iconColor={paperTheme.colors.onPrimaryContainer}
+              />
+            </Surface>
+            <View style={{ flex: 1 }}>
+              <Text variant="titleMedium" numberOfLines={1} style={{ marginBottom: 4 }}>
+                {document.template_name}
+              </Text>
+              <Text variant="bodySmall" style={{ color: paperTheme.colors.onSurfaceVariant }}>
+                {document.file_type}
               </Text>
             </View>
           </View>
-          <View className="flex-row items-center">
-            <Text className="text-xs text-gray-500 mr-4">
-              {document.file_type}
-            </Text>
-            <Text className="text-xs text-gray-500">
-              {new Date(document.created_at).toLocaleDateString()}
-            </Text>
-          </View>
-        </View>
-      </View>
-      
-      <View className="flex-row justify-end pt-3 border-t border-gray-100 space-x-2">
-        <TouchableOpacity
-          className="bg-green-100 px-3 py-2 rounded-lg flex-row items-center"
-          onPress={() => onView(document)}
-          disabled={document.status !== 'completed'}
-        >
-          <Ionicons name="eye-outline" size={16} color="#059669" />
-          <Text className="text-green-600 text-sm font-medium ml-1">View</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          className="bg-blue-100 px-3 py-2 rounded-lg flex-row items-center"
-          onPress={handleDownload}
-          disabled={downloading || document.status !== 'completed'}
-        >
-          {downloading ? (
-            <ActivityIndicator size="small" color="#2563EB" />
-          ) : (
-            <Ionicons name="download-outline" size={16} color="#2563EB" />
-          )}
-          <Text className="text-blue-600 text-sm font-medium ml-1">
-            {downloading ? 'Downloading...' : 'Download'}
+          <Text variant="bodySmall" style={{ 
+            color: paperTheme.colors.onSurfaceVariant,
+            textAlign: responsive.isPhone ? 'left' : 'right'
+          }}>
+            {new Date(document.created_at).toLocaleDateString()}
           </Text>
-        </TouchableOpacity>
+        </View>
+      </Card.Content>
+      
+      <Card.Actions style={{ 
+        flexDirection: layout.getFlexDirection(false),
+        flexWrap: responsive.isPhone ? 'wrap' : 'nowrap',
+        gap: responsive.spacing.xs
+      }}>
+        <Button
+          mode="contained-tonal"
+          icon="eye"
+          onPress={() => onView(document)}
+          style={[responsive.buttonStyle, { 
+            marginRight: responsive.isPhone ? 0 : responsive.spacing.xs,
+            marginBottom: responsive.isPhone ? responsive.spacing.xs : 0,
+            flex: responsive.isPhone ? 1 : 0
+          }]}
+          compact={responsive.isPhone}
+        >
+          {responsive.isPhone ? 'View' : 'View'}
+        </Button>
         
-        <TouchableOpacity
-          className="bg-red-100 px-3 py-2 rounded-lg flex-row items-center"
+        <Button
+          mode="contained-tonal"
+          icon={downloading ? undefined : "download"}
+          onPress={handleDownload}
+          disabled={downloading}
+          style={[responsive.buttonStyle, { 
+            marginRight: responsive.isPhone ? 0 : responsive.spacing.xs,
+            marginBottom: responsive.isPhone ? responsive.spacing.xs : 0,
+            flex: responsive.isPhone ? 1 : 0
+          }]}
+          compact={responsive.isPhone}
+        >
+          {downloading && <ActivityIndicator size="small" />}
+          {downloading ? (responsive.isPhone ? 'Downloading...' : 'Downloading...') : (responsive.isPhone ? 'Download' : 'Download')}
+        </Button>
+        
+        <Button
+          mode="contained-tonal"
+          icon={deleting ? undefined : "delete"}
           onPress={handleDelete}
           disabled={deleting}
+          buttonColor={paperTheme.colors.errorContainer}
+          textColor={paperTheme.colors.onErrorContainer}
+          style={[responsive.buttonStyle, { 
+            flex: responsive.isPhone ? 1 : 0
+          }]}
+          compact={responsive.isPhone}
         >
-          {deleting ? (
-            <ActivityIndicator size="small" color="#DC2626" />
-          ) : (
-            <Ionicons name="trash-outline" size={16} color="#DC2626" />
-          )}
-          <Text className="text-red-600 text-sm font-medium ml-1">
-            {deleting ? 'Deleting...' : 'Delete'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-        </TouchableOpacity>
-      </View>
-    </View>
+          {deleting && <ActivityIndicator size="small" />}
+          {deleting ? (responsive.isPhone ? 'Deleting...' : 'Deleting...') : (responsive.isPhone ? 'Delete' : 'Delete')}
+        </Button>
+      </Card.Actions>
+    </Card>
   );
 }
 
@@ -184,12 +201,14 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const responsive = useResponsiveStyles();
+  const layout = useResponsiveLayout();
 
   const loadDocuments = async () => {
     if (!user) return;
     
     try {
-      const { data, error } = await getUserDocuments();
+      const { data, error } = await getUserDocuments(user.id);
         
       if (error) {
         console.error('Error loading documents:', error);
@@ -240,7 +259,7 @@ function DashboardContent() {
 
   const handleDownloadDocument = async (document: Document) => {
     try {
-      const { data: downloadUrl, error } = await getDocumentDownloadUrl(document.file_path);
+      const { data: downloadUrl, error } = await getDocumentDownloadUrl(document.storage_path);
       if (error) throw error;
       
       if (!downloadUrl) {
@@ -249,12 +268,12 @@ function DashboardContent() {
       }
 
       // Download the file
-      const fileUri = FileSystem.documentDirectory + document.title;
-      const downloadResult = await FileSystem.downloadAsync(downloadUrl, fileUri);
+      const fileUri = FileSystem.documentDirectory + document.template_name;
+      const downloadResult = await FileSystem.downloadAsync(downloadUrl.signedUrl, fileUri);
       
       if (downloadResult.status === 200) {
         // Share the downloaded file
-        await Sharing.shareAsync(downloadResult.uri);
+        await shareAsync(downloadResult.uri);
         Alert.alert('Success', 'Document downloaded and ready to share');
       } else {
         Alert.alert('Error', 'Failed to download document');
@@ -293,61 +312,91 @@ function DashboardContent() {
   };
 
   const filteredDocuments = documents.filter(doc =>
-    doc.title.toLowerCase().includes(searchQuery.toLowerCase())
+    doc.template_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
 
 
+  const paperTheme = usePaperTheme();
+
   if (loading) {
-    return <LoadingSpinner message="Loading dashboard..." />;
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: paperTheme.colors.background }}>
+        <ActivityIndicator size="large" color={paperTheme.colors.primary} />
+        <Text variant="bodyLarge" style={{ marginTop: 16, color: paperTheme.colors.onBackground }}>
+          Loading dashboard...
+        </Text>
+      </View>
+    );
   }
 
   return (
-    <View className="flex-1 bg-gray-50">
+    <View style={{ flex: 1, backgroundColor: paperTheme.colors.background }}>
       {/* Header */}
-      <View className="bg-white border-b border-gray-200 px-6 py-4">
-        <View className="flex-row justify-between items-center">
-          <View className="flex-1">
-            <Text className="text-2xl font-bold text-gray-900">
+      <Surface style={[responsive.headerStyle, { paddingVertical: responsive.spacing.md }]} elevation={1}>
+        <View style={{ 
+          flexDirection: layout.getFlexDirection(true), 
+          justifyContent: 'space-between', 
+          alignItems: responsive.isPhone ? 'flex-start' : 'center',
+          gap: responsive.spacing.md
+        }}>
+          <View style={{ flex: 1 }}>
+            <Text variant="headlineSmall" style={{ color: paperTheme.colors.onSurface }}>
               Welcome back!
             </Text>
-            <Text className="text-sm text-gray-600 mt-1">
+            <Text variant="bodyMedium" style={{ color: paperTheme.colors.onSurfaceVariant, marginTop: 4 }}>
               {profile?.full_name || user?.email}
             </Text>
             {role && (
-              <Text className="text-xs text-primary-600 capitalize mt-1">
+              <Chip 
+                style={{ alignSelf: 'flex-start', marginTop: responsive.spacing.xs }}
+                textStyle={{ fontSize: responsive.isPhone ? 11 : 12 }}
+                compact
+              >
                 Role: {role}
-              </Text>
+              </Chip>
             )}
           </View>
           
-          <TouchableOpacity
-            className="bg-red-100 px-4 py-2 rounded-lg"
-            onPress={handleSignOut}
-          >
-            <Text className="text-red-600 font-medium">Sign Out</Text>
-          </TouchableOpacity>
+          <View style={{ 
+            flexDirection: responsive.isPhone ? 'column' : 'row', 
+            alignItems: responsive.isPhone ? 'stretch' : 'center',
+            gap: responsive.spacing.xs,
+            width: responsive.isPhone ? '100%' : 'auto'
+          }}>
+            <ThemeToggle />
+            <Button
+              mode="contained-tonal"
+              onPress={handleSignOut}
+              buttonColor={paperTheme.colors.errorContainer}
+              textColor={paperTheme.colors.onErrorContainer}
+              style={responsive.isPhone ? { width: '100%' } : {}}
+              compact={responsive.isPhone}
+            >
+              Sign Out
+            </Button>
+          </View>
         </View>
-      </View>
+      </Surface>
 
       {/* Search */}
-      <View className="px-6 py-4 bg-white border-b border-gray-200">
-        <TextInput
-          className="input-field"
+      <Surface style={[responsive.containerStyle, { paddingVertical: responsive.spacing.md }]} elevation={0}>
+        <Searchbar
           placeholder="Search documents..."
           value={searchQuery}
           onChangeText={setSearchQuery}
+          style={{ backgroundColor: paperTheme.colors.surfaceVariant }}
         />
-      </View>
+      </Surface>
 
       {/* Documents List */}
-      <View className="flex-1 px-6 py-4">
+      <View style={[responsive.containerStyle, { flex: 1, paddingTop: responsive.spacing.md }]}>
         {filteredDocuments.length === 0 ? (
-          <View className="flex-1 justify-center items-center">
-            <Text className="text-gray-500 text-lg mb-2">
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Text variant="titleLarge" style={{ color: paperTheme.colors.onSurfaceVariant, marginBottom: 8 }}>
               {searchQuery ? 'No documents found' : 'No documents yet'}
             </Text>
-            <Text className="text-gray-400 text-center">
+            <Text variant="bodyMedium" style={{ color: paperTheme.colors.onSurfaceVariant, textAlign: 'center' }}>
               {searchQuery
                 ? 'Try adjusting your search terms'
                 : 'Create your first document to get started'}
@@ -366,34 +415,49 @@ function DashboardContent() {
                 onRefresh={handleRefresh}
               />
             )}
+            numColumns={responsive.layout.gridColumns}
+            key={responsive.layout.gridColumns}
+            columnWrapperStyle={responsive.gridStyle.columnWrapperStyle}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
+                colors={[paperTheme.colors.primary]}
+                tintColor={paperTheme.colors.primary}
               />
             }
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ 
+              paddingBottom: 100,
+              gap: responsive.isTablet ? responsive.spacing.md : 0
+            }}
           />
         )}
       </View>
 
-
-
       {/* Floating Action Button */}
-      <TouchableOpacity
-        className="absolute bottom-6 right-6 bg-blue-600 w-14 h-14 rounded-full items-center justify-center shadow-lg"
+      <FAB
+        icon="plus"
+        style={{
+          position: 'absolute',
+          margin: responsive.spacing.md,
+          right: 0,
+          bottom: 0,
+          backgroundColor: paperTheme.colors.primary,
+        }}
+        size={responsive.isPhone ? 'medium' : 'large'}
         onPress={handleCreateDocument}
-      >
-        <Text className="text-white text-2xl font-light">+</Text>
-      </TouchableOpacity>
+      />
     </View>
   );
 }
 
-export default function DashboardScreen() {
+const DashboardScreen: React.FC = () => {
   return (
     <ProtectedRoute loadingMessage="Loading dashboard...">
       <DashboardContent />
     </ProtectedRoute>
   );
-}
+};
+
+export default DashboardScreen;
