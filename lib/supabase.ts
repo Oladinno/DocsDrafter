@@ -347,14 +347,7 @@ export const generateDocument = async (
 export const getDocumentById = async (documentId: string) => {
   const { data, error } = await supabase
     .from('documents')
-    .select(`
-      *,
-      templates (
-        id,
-        name,
-        description
-      )
-    `)
+    .select('*')
     .eq('id', documentId)
     .single();
   return { data, error };
@@ -406,14 +399,7 @@ export const deleteDocumentComplete = async (documentId: string) => {
 export const getUserDocumentsWithTemplates = async (userId: string) => {
   const { data, error } = await supabase
     .from('documents')
-    .select(`
-      *,
-      templates (
-        id,
-        name,
-        description
-      )
-    `)
+    .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
   return { data, error };
@@ -425,14 +411,7 @@ export const getUserDocumentsWithTemplates = async (userId: string) => {
 export const searchUserDocuments = async (userId: string, searchTerm: string) => {
   const { data, error } = await supabase
     .from('documents')
-    .select(`
-      *,
-      templates (
-        id,
-        name,
-        description
-      )
-    `)
+    .select('*')
     .eq('user_id', userId)
     .ilike('template_name', `%${searchTerm}%`)
     .order('created_at', { ascending: false });

@@ -41,7 +41,9 @@ function DocumentViewerScreen() {
   const screenData = Dimensions.get('window');
 
   useEffect(() => {
-    loadDocument();
+    if (documentId) {
+      loadDocument();
+    }
   }, [documentId]);
 
   const loadDocument = async () => {
@@ -55,22 +57,22 @@ function DocumentViewerScreen() {
       }
 
       // Get document metadata
-      const docData = await getDocumentById(documentId);
-      if (!docData) {
-        setError('Document not found');
+      const { data: docData, error: docError } = await getDocumentById(documentId as string);
+      if (docError || !docData) {
+        setError(docError?.message || 'Document not found');
         return;
       }
 
       setDocument(docData);
 
       // Get download URL for PDF viewing
-      const downloadUrl = await getDocumentDownloadUrl(docData.storage_path);
-      if (!downloadUrl) {
-        setError('Unable to load document');
+      const { data: urlData, error: urlError } = await getDocumentDownloadUrl(docData.storage_path);
+      if (urlError || !urlData?.signedUrl) {
+        setError(urlError?.message || 'Unable to load document');
         return;
       }
 
-      setPdfUri(downloadUrl);
+      setPdfUri(urlData.signedUrl);
     } catch (err: any) {
       console.error('Error loading document:', err);
       setError(err.message || 'Failed to load document');
@@ -137,7 +139,10 @@ function DocumentViewerScreen() {
         return;
       }
 
-      await deleteDocumentComplete(document.id);
+      const { error } = await deleteDocumentComplete(document.id);
+      if (error) {
+        throw error;
+      }
 
       setSuccessMessage('The document has been successfully deleted.');
       setSnackbarVisible(true);

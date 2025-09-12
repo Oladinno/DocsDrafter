@@ -262,19 +262,32 @@ function DashboardContent() {
       const { data: downloadUrl, error } = await getDocumentDownloadUrl(document.storage_path);
       if (error) throw error;
       
-      if (!downloadUrl) {
+      if (!downloadUrl?.signedUrl) {
         Alert.alert('Error', 'Could not get download URL');
         return;
       }
 
-      // Download the file
-      const fileUri = FileSystem.documentDirectory + document.template_name;
+      // Build a safe filename with the correct extension
+      const safeName = document.template_name.replace(/[^a-zA-Z0-9-_]/g, '_');
+      const ext = document.file_type.toLowerCase() === 'pdf' ? 'pdf' : 'docx';
+      const fileName = `${safeName}.${ext}`;
+      const fileUri = FileSystem.documentDirectory + fileName;
+
+      // Download the file to a path with the correct extension
       const downloadResult = await FileSystem.downloadAsync(downloadUrl.signedUrl, fileUri);
       
       if (downloadResult.status === 200) {
-        // Share the downloaded file
-        await shareAsync(downloadResult.uri);
-        Alert.alert('Success', 'Document downloaded and ready to share');
+        // Determine the proper MIME type
+        const mimeType = document.file_type.toLowerCase() === 'pdf'
+          ? 'application/pdf'
+          : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+        // Share the downloaded file with the correct MIME type
+        await shareAsync(downloadResult.uri, {
+          mimeType,
+          dialogTitle: `Save ${document.template_name}`,
+        });
+        Alert.alert('Success', `Document downloaded as ${fileName}`);
       } else {
         Alert.alert('Error', 'Failed to download document');
       }
