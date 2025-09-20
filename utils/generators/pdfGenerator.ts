@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
@@ -24,7 +24,18 @@ export async function createPdf({ html, fileName }: CreatePdfParams): Promise<Cr
   // Use expo-print as the primary, Expo-native method
   try {
     const { uri, base64 } = await Print.printToFileAsync({ html, base64: true });
-    return { fileUri: uri, base64 };
+
+    // Ensure local file name matches desired fileName for consistency (e.g., when sharing)
+    const desiredUri = `${FileSystem.documentDirectory}${fileName}.pdf`;
+    try {
+      // Remove existing target if any to avoid move failures
+      try { await FileSystem.deleteAsync(desiredUri, { idempotent: true }); } catch {}
+      await FileSystem.moveAsync({ from: uri, to: desiredUri });
+      return { fileUri: desiredUri, base64 };
+    } catch (renameErr) {
+      console.warn('Failed to rename printed PDF; returning original uri', renameErr);
+      return { fileUri: uri, base64 };
+    }
   } catch (error) {
     console.error("expo-print failed, falling back to pdf-lib:", error);
 

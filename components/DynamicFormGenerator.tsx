@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,8 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { useForm, Controller, FieldValues } from 'react-hook-form';
-import { Picker } from '@react-native-picker/picker';
+import { useForm, Controller, FieldValues, useFieldArray } from 'react-hook-form';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useState } from 'react';
 import {
   TextInput as PaperTextInput,
   Button,
@@ -46,6 +44,12 @@ interface DynamicFormGeneratorProps {
   loading?: boolean;
 }
 
+const getError = (errors: any, name: string) => {
+  if (!name || !errors) return null;
+  const parts = name.replace(/\[/g, '.').replace(/\]/g, '').split('.');
+  return parts.reduce((obj, part) => obj && obj[part], errors);
+};
+
 interface FormFieldProps {
   name: string;
   property: JSONSchemaProperty;
@@ -63,9 +67,8 @@ const FormField: React.FC<FormFieldProps> = ({
 }) => {
   const paperTheme = useTheme();
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
   const [menuVisible, setMenuVisible] = useState(false);
-  const [menuAnchor, setMenuAnchor] = useState({ x: 0, y: 0 });
+  const error = getError(errors, name);
 
   const renderField = () => {
     switch (property.type) {
@@ -91,17 +94,16 @@ const FormField: React.FC<FormFieldProps> = ({
                       />
                     }
                     onPressIn={() => setShowDatePicker(true)}
-                    error={!!errors[name]}
+                    error={!!error}
                   />
                   {showDatePicker && (
                     <DateTimePicker
-                      value={selectedDate}
+                      value={value ? new Date(value) : new Date()}
                       mode="date"
                       display="default"
                       onChange={(event, date) => {
                         setShowDatePicker(false);
                         if (date) {
-                          setSelectedDate(date);
                           onChange(date.toISOString().split('T')[0]);
                         }
                       }}
@@ -137,7 +139,7 @@ const FormField: React.FC<FormFieldProps> = ({
                         />
                       }
                       onPressIn={() => setMenuVisible(true)}
-                      error={!!errors[name]}
+                      error={!!error}
                     />
                   }
                 >
@@ -172,7 +174,7 @@ const FormField: React.FC<FormFieldProps> = ({
                 onBlur={onBlur}
                 multiline={name.includes('body') || name.includes('content')}
                 numberOfLines={name.includes('body') || name.includes('content') ? 4 : 1}
-                error={!!errors[name]}
+                error={!!error}
               />
             )}
           />
@@ -187,8 +189,8 @@ const FormField: React.FC<FormFieldProps> = ({
             rules={{ 
               required: required ? `${property.title || name} is required` : false,
               pattern: {
-                value: /^\d+$/,
-                message: 'Please enter a valid number'
+                value: property.type === 'number' ? /^-?\d+(\.\d+)?$/ : /^-?\d+$/,
+                message: property.type === 'number' ? 'Please enter a valid number' : 'Please enter a valid integer'
               }
             }}
             render={({ field: { onChange, onBlur, value } }) => (
@@ -200,7 +202,7 @@ const FormField: React.FC<FormFieldProps> = ({
                 onChangeText={onChange}
                 onBlur={onBlur}
                 keyboardType="numeric"
-                error={!!errors[name]}
+                error={!!error}
               />
             )}
           />
@@ -231,7 +233,7 @@ const FormField: React.FC<FormFieldProps> = ({
                     onBlur={onBlur}
                     multiline
                     numberOfLines={3}
-                    error={!!errors[name]}
+                    error={!!error}
                   />
                   <HelperText type="info">
                     Enter as JSON array or comma-separated values
@@ -242,40 +244,52 @@ const FormField: React.FC<FormFieldProps> = ({
           );
         }
         
-        if (property.items?.type === 'object') {
-          // For complex arrays like invoice items, we'll show a simplified input
+        if (property.items?.type === 'object' && property.items.properties) {
+          const { fields, append, remove } = useFieldArray({
+            control,
+            name,
+          });
+          const itemProperties = property.items.properties;
+          const defaultItem = Object.keys(itemProperties).reduce((acc, key) => {
+            const prop = itemProperties[key];
+            if (prop.type === 'array') {
+              acc[key] = [];
+            } else {
+              acc[key] = '';
+            }
+            return acc;
+          }, {} as Record<string, any>);
+
           return (
-            <Controller
-              name={name}
-              control={control}
-              rules={{ required: required ? `${property.title || name} is required` : false }}
-              render={({ field: { onChange, value } }) => (
-                <View>
-                  <Text className="text-sm text-gray-600 mb-2">
-                    Enter items in JSON format or use simplified format
-                  </Text>
-                  <TextInput
-                    className="border border-gray-300 rounded-lg px-3 py-3 bg-white text-gray-900"
-                    placeholder={`Enter ${property.title || name} (JSON format)`}
-                    value={typeof value === 'string' ? value : JSON.stringify(value || [], null, 2)}
-                    onChangeText={(text) => {
-                      try {
-                        const parsed = JSON.parse(text);
-                        onChange(parsed);
-                      } catch {
-                        onChange(text);
-                      }
-                    }}
-                    multiline
-                    numberOfLines={6}
-                    textAlignVertical="top"
-                  />
-                </View>
-              )}
-            />
+            <Surface style={{ padding: 12, borderRadius: 8, backgroundColor: paperTheme.colors.surfaceVariant, marginVertical: 8 }}>
+              <PaperText variant="titleMedium" style={{ marginBottom: 8 }}>{property.title || name}</PaperText>
+              {fields.map((item, index) => (
+                <Card key={item.id} style={{ marginBottom: 12, padding: 12, backgroundColor: paperTheme.colors.surface }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <PaperText variant="bodyLarge" style={{fontWeight: 'bold'}}>Item {index + 1}</PaperText>
+                    <IconButton icon="delete-outline" onPress={() => remove(index)} size={20} />
+                  </View>
+                  <Divider style={{marginBottom: 12}} />
+                  {Object.entries(itemProperties).map(([propName, propInfo]) => (
+                    <FormField
+                      key={propName}
+                      name={`${name}[${index}].${propName}`}
+                      property={propInfo}
+                      control={control}
+                      errors={errors}
+                      required={property.items?.required?.includes(propName) || false}
+                    />
+                  ))}
+                </Card>
+              ))}
+              <Button mode="contained-tonal" onPress={() => append(defaultItem)} style={{ marginTop: 8 }} icon="plus">
+                Add Item
+              </Button>
+            </Surface>
           );
         }
-        break;
+        
+        return <PaperText>Unsupported array type in form.</PaperText>;
         
       default:
         return (
@@ -291,7 +305,7 @@ const FormField: React.FC<FormFieldProps> = ({
                 value={value || ''}
                 onChangeText={onChange}
                 onBlur={onBlur}
-                error={!!errors[name]}
+                error={!!error}
               />
             )}
           />
@@ -302,9 +316,9 @@ const FormField: React.FC<FormFieldProps> = ({
   return (
     <View style={{ marginBottom: 16 }}>
       {renderField()}
-      {errors[name] && (
-        <HelperText type="error" visible={!!errors[name]}>
-          {errors[name]?.message}
+      {error && (
+        <HelperText type="error" visible={!!error}>
+          {error?.message as string}
         </HelperText>
       )}
     </View>
@@ -353,16 +367,20 @@ const DynamicFormGenerator: React.FC<DynamicFormGeneratorProps> = ({
   return (
     <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
       <View style={{ padding: 16 }}>
-        {Object.entries(schema.properties).map(([fieldName, property]) => (
-          <FormField
-            key={fieldName}
-            name={fieldName}
-            property={property}
-            control={control}
-            errors={errors}
-            required={requiredFields.includes(fieldName)}
-          />
-        ))}
+        {schema && schema.properties ? (
+          Object.entries(schema.properties).map(([fieldName, property]) => (
+            <FormField
+              key={fieldName}
+              name={fieldName}
+              property={property}
+              control={control}
+              errors={errors}
+              required={requiredFields.includes(fieldName)}
+            />
+          ))
+        ) : (
+          <PaperText>This template has no configurable fields.</PaperText>
+        )}
         
         <Surface style={{ padding: 16, marginTop: 16, borderRadius: 8 }}>
           <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -378,8 +396,7 @@ const DynamicFormGenerator: React.FC<DynamicFormGeneratorProps> = ({
             
             <Button
                 mode="contained"
-                onPress={handleSubmit(onSubmit)}
-                disabled={loading}
+                onPress={handleSubmit(handleFormSubmit)}                disabled={loading}
                 loading={loading}
                 style={{ flex: 1 }}
                 icon="file-document"

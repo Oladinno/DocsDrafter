@@ -117,7 +117,7 @@ export default function ProfileScreen() {
             }}>
               <Avatar.Text 
                 size={responsive.getIconSize('large')}
-                label={user?.email?.charAt(0).toUpperCase() || 'U'}
+                label={user?.email?.charAt(0)?.toUpperCase() || 'U'}
                 style={{ 
                   marginBottom: responsive.spacing.md,
                   backgroundColor: paperTheme.colors.primary

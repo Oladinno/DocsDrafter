@@ -1,6 +1,17 @@
 import { Dimensions, PixelRatio } from 'react-native';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+let SCREEN_WIDTH = Dimensions.get('window').width;
+let SCREEN_HEIGHT = Dimensions.get('window').height;
+
+const subscription = Dimensions.addEventListener('change', ({ window }) => {
+  SCREEN_WIDTH = window.width;
+  SCREEN_HEIGHT = window.height;
+});
+
+// Export cleanup function if needed
+export const cleanup = () => {
+  subscription?.remove();
+};
 
 // Breakpoints based on common device sizes
 export const BREAKPOINTS = {

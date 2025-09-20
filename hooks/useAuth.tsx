@@ -43,7 +43,7 @@ function useAuthState(): AuthState {
   const [loading, setLoading] = useState(true);
 
   // Function to load user profile
-  const loadUserProfile = useCallback(async (userId: string) => {
+  const loadUserProfile = useCallback(async (userId: string, email: string, fullName: string | null) => {
     try {
       const { profile: userProfile, error } = await getUserProfile(userId);
       if (error) {
@@ -52,9 +52,9 @@ function useAuthState(): AuthState {
         if (error.code === 'PGRST116') {
           const { data: newProfile, error: createError } = await createUserProfile({
             id: userId,
-            email: user?.email || '',
+            email: email,
             role: 'user',
-            full_name: user?.user_metadata?.full_name || null,
+            full_name: fullName,
           });
           if (createError) {
             console.error('Error creating user profile:', createError);
@@ -68,14 +68,14 @@ function useAuthState(): AuthState {
     } catch (error) {
       console.error('Error in loadUserProfile:', error);
     }
-  }, [user]);
+  }, []); // Removed 'user' from dependency array as email and fullName are passed directly
 
   // Function to refresh profile
   const refreshProfile = useCallback(async () => {
-    if (user?.id) {
-      await loadUserProfile(user.id);
+    if (user?.id && user.email) {
+      await loadUserProfile(user.id, user.email, user.user_metadata?.full_name || null);
     }
-  }, [user?.id, loadUserProfile]);
+  }, [user, loadUserProfile]);
 
   // Function to sign out
   const signOut = useCallback(async () => {
@@ -116,8 +116,8 @@ function useAuthState(): AuthState {
           setUser(session?.user ?? null);
           
           // Load user profile if user exists
-          if (session?.user?.id) {
-            await loadUserProfile(session.user.id);
+          if (session?.user?.id && session?.user?.email) {
+            await loadUserProfile(session.user.id, session.user.email, session.user.user_metadata?.full_name || null);
           }
         }
       } catch (error) {
@@ -136,8 +136,8 @@ function useAuthState(): AuthState {
         setSession(session);
         setUser(session?.user ?? null);
         
-        if (session?.user?.id) {
-          await loadUserProfile(session.user.id);
+        if (session?.user?.id && session?.user?.email) {
+          await loadUserProfile(session.user.id, session.user.email, session.user.user_metadata?.full_name || null);
         } else {
           setProfile(null);
         }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Dimensions,
@@ -9,14 +9,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityIndicator, Appbar, Button, Dialog, IconButton, Portal, Snackbar, Surface, Text, useTheme as usePaperTheme } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
-import * as FileSystem from 'expo-file-system';
+import type { WebView as WebViewType } from 'react-native-webview';
+import { WebViewNavigationEvent, WebViewErrorEvent, WebViewNavigation } from 'react-native-webview/lib/WebViewTypes';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Linking from 'expo-linking';
 import { shareAsync, isAvailableAsync } from 'expo-sharing';
 import { getDocumentById, getDocumentDownloadUrl, deleteDocumentComplete } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useResponsiveStyles, useResponsiveLayout } from '../src/hooks/useResponsive';
 import type { Document } from '../lib/supabase';
 
-interface DocumentViewerParams {
+interface DocumentViewerParams extends Record<string, string | undefined> {
   documentId: string;
   title?: string;
 }
@@ -30,6 +33,10 @@ function DocumentViewerScreen() {
   const layout = useResponsiveLayout();
   const [document, setDocument] = useState<Document | null>(null);
   const [pdfUri, setPdfUri] = useState<string>('');
+  const [viewerUri, setViewerUri] = useState<string>('');
+  const [canGoBack, setCanGoBack] = useState<boolean>(false);
+  const [canGoForward, setCanGoForward] = useState<boolean>(false);
+  const webViewRef = useRef<WebViewType>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -73,6 +80,7 @@ function DocumentViewerScreen() {
       }
 
       setPdfUri(urlData.signedUrl);
+      setViewerUri(buildViewerUrl(docData.file_type, urlData.signedUrl));
     } catch (err: any) {
       console.error('Error loading document:', err);
       setError(err.message || 'Failed to load document');
@@ -187,6 +195,18 @@ function DocumentViewerScreen() {
     }
   };
 
+  const openInBrowser = async () => {
+    try {
+      if (viewerUri) {
+        await Linking.openURL(viewerUri);
+      }
+    } catch (err) {
+      console.error('Error opening in browser:', err);
+      setError('Failed to open document in browser');
+      setSnackbarVisible(true);
+    }
+  };
+
   if (loading) {
     return (
       <Surface style={{ flex: 1, backgroundColor: paperTheme.colors.background }}>
@@ -256,8 +276,12 @@ function DocumentViewerScreen() {
           <Appbar.Content 
             title={document?.template_name || title || 'Document'} 
             titleStyle={{ fontSize: 20, fontWeight: 'bold' }}
-            subtitle={document ? `${document.file_type} • ${new Date(document.created_at).toLocaleDateString()}` : ''}
+            subtitle={document ? `${document.file_type} • ${new Date(document.created_at).toLocaleDateString()}` : undefined}
           />
+          <Appbar.Action icon="chevron-left" onPress={() => webViewRef.current?.goBack()} disabled={!viewerUri || !canGoBack} />
+          <Appbar.Action icon="chevron-right" onPress={() => webViewRef.current?.goForward()} disabled={!viewerUri || !canGoForward} />
+          <Appbar.Action icon="refresh" onPress={() => webViewRef.current?.reload()} disabled={!viewerUri} />
+          <Appbar.Action icon="open-in-new" onPress={openInBrowser} disabled={!viewerUri} />
         </Appbar.Header>
       
       <Surface style={{ 
@@ -267,7 +291,7 @@ function DocumentViewerScreen() {
         
         {/* Action Buttons */}
         <View style={{ 
-          flexDirection: layout.getFlexDirection('row'), 
+          flexDirection: layout.getFlexDirection(), 
           gap: responsive.spacing.sm,
           marginBottom: responsive.spacing.md,
           flexWrap: responsive.isPhone ? 'wrap' : 'nowrap'
@@ -336,32 +360,42 @@ function DocumentViewerScreen() {
       )}
 
       {/* PDF Viewer */}
-      {pdfUri && document?.file_type === 'PDF' ? (
+      {viewerUri ? (
         <View style={{ flex: 1 }}>
           <WebView
-            source={{ uri: pdfUri }}
+            ref={webViewRef}
+            source={{ uri: viewerUri }}
+            onNavigationStateChange={(navState: WebViewNavigation) => {
+              setCanGoBack(navState.canGoBack);
+              setCanGoForward(navState.canGoForward);
+            }}
             style={{
               flex: 1,
-              width: responsive.screenWidth,
-              height: responsive.screenHeight,
+              width: responsive.width,
+              height: responsive.height,
             }}
-            onError={(syntheticEvent) => {
+            onError={(syntheticEvent: WebViewErrorEvent) => {
               const { nativeEvent } = syntheticEvent;
-              console.error('WebView error:', nativeEvent);
-              setError('Failed to load PDF');
+              if (__DEV__) {
+                console.error('WebView error:', nativeEvent);
+              }
+              setError(`Failed to load document: ${nativeEvent.description || 'Unknown error'}`);
               setSnackbarVisible(true);
             }}
-            onLoadStart={() => console.log('PDF loading started')}
-            onLoadEnd={() => console.log('PDF loading completed')}
+            onLoadStart={() => __DEV__ && console.log('Document loading started')}
+            onLoadEnd={() => __DEV__ && console.log('Document loading completed')}
             startInLoadingState={true}
-            renderLoading={() => (
+            // Security configurations
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            mixedContentMode="never" // Use "always" only if HTTP content is required
+            allowsInlineMediaPlayback={true}            renderLoading={() => (
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <ActivityIndicator size="large" color={paperTheme.colors.primary} />
-                <Text style={{ color: paperTheme.colors.onSurface, marginTop: responsive.spacing.xs }}>Loading PDF...</Text>
+                <Text style={{ color: paperTheme.colors.onSurface, marginTop: responsive.spacing.xs }}>Loading document...</Text>
               </View>
             )}
-          />
-        </View>
+          /></View>
       ) : (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: responsive.spacing.lg }}>
           <Surface 
@@ -392,7 +426,7 @@ function DocumentViewerScreen() {
               }}
             >
               {document?.file_type === 'DOCX'
-                ? 'Word documents cannot be viewed in-app. Use the download button to save and open with a compatible app.'
+                ? 'Preview is currently unavailable.'
                 : 'This document type cannot be previewed in-app.'}
             </Text>
             <Button 
@@ -431,7 +465,7 @@ function DocumentViewerScreen() {
           <Dialog.Title>Delete Document</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium">
-              Are you sure you want to delete "{document?.title || 'this document'}"? This action cannot be undone.
+              Are you sure you want to delete "{document?.template_name || 'this document'}"? This action cannot be undone.
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
@@ -447,3 +481,16 @@ function DocumentViewerScreen() {
 }
 
 export default DocumentViewerScreen;
+
+const buildViewerUrl = (type: string, url: string): string => {
+  const lower = type.toLowerCase();
+  if (lower === 'docx') {
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+  }
+  if (lower === 'pdf') {
+    return Platform.OS === 'android'
+      ? `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`
+      : url;
+  }
+  return url;
+};

@@ -29,6 +29,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const theme = useTheme();
   
   const {
@@ -156,12 +157,17 @@ export default function LoginScreen() {
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
-                    secureTextEntry
+                    secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
                     error={!!errors.password}
                     left={<TextInput.Icon icon="lock" />}
-                    right={<TextInput.Icon icon="eye" />}
+                    right={
+                      <TextInput.Icon
+                        icon={showPassword ? 'eye-off' : 'eye'}
+                        onPress={() => setShowPassword(!showPassword)}
+                      />
+                    }
                   />
                 )}
               />

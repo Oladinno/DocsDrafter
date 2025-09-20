@@ -30,9 +30,8 @@ serve(async (req: Request) => {
 
   try {
     // Initialize Supabase client
-    const supabaseUrl = process.env.SUPABASE_URL ?? '';
-    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? '';
-    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';    
     // Debug logging for environment variables
     console.log('SUPABASE_URL:', supabaseUrl ? 'Set' : 'Missing');
     console.log('SUPABASE_ANON_KEY:', supabaseAnonKey ? 'Set' : 'Missing');
@@ -387,13 +386,7 @@ async function generatePDF(template: any, content: Record<string, any>): Promise
     yPosition -= 30;
     
     // Add new page if needed
-    if (yPosition < 100) {
-      const newPage = pdfDoc.addPage([612, 792]);
-      yPosition = height - 50;
-    }
-  }
-  
-  return await pdfDoc.save();
+  let page = pdfDoc.addPage([612, 792]); // Standard letter size  return await pdfDoc.save();
 }
 
 async function generateDOCX(template: any, content: Record<string, any>): Promise<Uint8Array> {

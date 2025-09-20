@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   FlatList,
-  SafeAreaView,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Text,
   Card,
@@ -20,7 +20,7 @@ import {
 } from 'react-native-paper';
 import { router } from 'expo-router';
 import { useResponsiveStyles, useResponsiveLayout } from '../src/hooks/useResponsive';
-import { getTemplates, Template } from '../lib/supabase';
+import { getTemplates, Template, TEMPLATE_CATEGORIES } from '../lib/supabase';
 import { ScrollView } from 'react-native-gesture-handler';
 
 
@@ -201,7 +201,7 @@ const NewDocumentScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const categories = ['All', 'Legal', 'Business', 'Financial', 'Education'];
+  const categories = ['All', ...TEMPLATE_CATEGORIES];
   const paperTheme = usePaperTheme();
   const responsive = useResponsiveStyles();
   const layout = useResponsiveLayout();
@@ -233,28 +233,29 @@ const NewDocumentScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredTemplates(templates);
-    } else {
-      const filtered = templates.filter(template =>
-        template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        template.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        template.metadata?.category?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredTemplates(filtered);
+    let filtered = templates;
+    
+    // Apply category filter
+    if (selectedCategory !== 'All') {
+      filtered = filtered.filter((template) => {
+        const meta = (typeof template.metadata === 'object' && template.metadata) ? template.metadata as any : {};
+        const cat = typeof (meta as any).category === 'string' ? (meta as any).category : undefined;
+        return cat === selectedCategory;
+      });
     }
-  }, [searchQuery, templates]);
-
-  useEffect(() => {
-    if (selectedCategory === 'All') {
-      setFilteredTemplates(templates);
-    } else {
-      const filtered = templates.filter(
-        (template) => template.metadata?.category === selectedCategory
+    
+    // Apply search filter
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(template =>
+        template.name.toLowerCase().includes(query) ||
+        template.description?.toLowerCase().includes(query) ||
+        (template.metadata as any)?.category?.toLowerCase().includes(query)
       );
-      setFilteredTemplates(filtered);
     }
-  }, [selectedCategory, templates]);
+    
+    setFilteredTemplates(filtered);
+  }, [searchQuery, selectedCategory, templates]);
 
   const handleRefresh = () => {
     setRefreshing(true);

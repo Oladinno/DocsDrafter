@@ -7,7 +7,7 @@ The Supabase CLI deployment is failing due to network connectivity issues. This 
 
 1. **Open Supabase Dashboard**
    - Go to https://supabase.com/dashboard
-   - Navigate to your project: `arnxvifucwiezlsfggtp`
+   - Navigate to your project: `<YOUR_PROJECT_REF>`
 
 2. **Access Edge Functions**
    - Click on "Edge Functions" in the left sidebar
@@ -20,10 +20,6 @@ The Supabase CLI deployment is failing due to network connectivity issues. This 
 4. **Set Environment Variables**
    - In the dashboard, go to Settings → Environment Variables
    - Add the following variables:
-     ```
-     SUPABASE_URL=https://arnxvifucwiezlsfggtp.supabase.co
-     SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFybnh2aWZ1Y3dpZXpsc2ZnZ3RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwNjI2MzAsImV4cCI6MjA3MjYzODYzMH0.EDf5vgA1L5tBU58sUKNWDA53RUt6-13yNs2YAQJmqQY
-     ```
 
 5. **Deploy Function**
    - Click "Deploy" in the dashboard
@@ -39,7 +35,7 @@ If you want to try CLI again later:
 4. **Use the following commands:**
    ```bash
    npx supabase login
-   npx supabase link --project-ref arnxvifucwiezlsfggtp
+   npx supabase link --project-ref <YOUR_PROJECT_REF>
    npx supabase functions deploy generate-document
    ```
 

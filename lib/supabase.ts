@@ -70,11 +70,13 @@ export interface Database {
           name: string;
           json_schema: any;
           description?: string | null;
+          metadata?: any;
         };
         Update: {
           name?: string;
           json_schema?: any;
           description?: string | null;
+          metadata?: any;
         };
       };
       documents: {
@@ -83,8 +85,7 @@ export interface Database {
           user_id: string;
           template_name: string;
           storage_path: string;
-          file_type: string;
-          created_at: string;
+          file_type: 'PDF' | 'DOCX';          created_at: string;
         };
         Insert: {
           id?: string;
@@ -171,6 +172,56 @@ export const updatePassword = async (newPassword: string) => {
   return { data, error };
 };
 
+// Canonical template categories and normalization
+export const TEMPLATE_CATEGORIES = ['Legal', 'Business', 'Financial', 'Education'] as const;
+export type TemplateCategory = typeof TEMPLATE_CATEGORIES[number];
+
+const containsAny = (text: string, keywords: string[]) => {
+  const t = text.toLowerCase();
+  return keywords.some((k) => t.includes(k));
+};
+
+const normalizeCategoryValue = (value?: string): TemplateCategory | undefined => {
+  if (!value) return undefined;
+  const v = value.trim().toLowerCase();
+  if (['legal', 'law', 'compliance'].includes(v)) return 'Legal';
+  if (['business', 'operations', 'hr', 'human resources'].includes(v)) return 'Business';
+  if (['financial', 'finance', 'accounting'].includes(v)) return 'Financial';
+  if (['education', 'academic', 'school', 'training'].includes(v)) return 'Education';
+  return undefined;
+};
+
+const inferCategory = (t: Template): TemplateCategory => {
+  // 1) Use explicit metadata.category if present
+  const explicit = normalizeCategoryValue(t.metadata?.category);
+  if (explicit) return explicit;
+
+  // 2) Try tags array from metadata
+  const tags: string[] | undefined = Array.isArray(t.metadata?.tags) ? t.metadata.tags : undefined;
+  if (tags && tags.length) {
+    for (const tag of tags) {
+      const mapped = normalizeCategoryValue(String(tag));
+      if (mapped) return mapped;
+    }
+  }
+
+  // 3) Infer from template name/description
+  const text = `${t.name ?? ''} ${t.description ?? ''}`.toLowerCase();
+  if (containsAny(text, ['contract', 'agreement', 'nda', 'policy', 'legal', 'law', 'compliance', 'privacy', 'terms'])) return 'Legal';
+  if (containsAny(text, ['invoice', 'receipt', 'budget', 'estimate', 'billing', 'finance', 'financial', 'purchase order', 'po', 'quote'])) return 'Financial';
+  if (containsAny(text, ['meeting', 'minutes', 'letter', 'proposal', 'report', 'memo', 'offer', 'job', 'hr', 'human resources', 'business'])) return 'Business';
+  if (containsAny(text, ['school', 'education', 'academic', 'curriculum', 'lesson', 'syllabus', 'training'])) return 'Education';
+
+  // 4) Fallback
+  return 'Business';
+};
+
+const withNormalizedCategory = (t: Template): Template => {
+  const category = inferCategory(t);
+  const metadata = { ...(t.metadata || {}), category };
+  return { ...t, metadata } as Template;
+};
+
 // Profile management functions
 export const getUserProfile = async (userId: string): Promise<{ profile: UserProfile | null; error: any }> => {
   const { data: profile, error } = await supabase
@@ -227,7 +278,7 @@ export const getTemplates = async () => {
     .from('templates')
     .select('*')
     .order('name', { ascending: true });
-  return { data, error };
+  return { data: data ? data.map(withNormalizedCategory) : data, error };
 };
 
 export const getTemplate = async (templateId: string) => {
@@ -236,7 +287,7 @@ export const getTemplate = async (templateId: string) => {
     .select('*')
     .eq('id', templateId)
     .single();
-  return { data, error };
+  return { data: data ? withNormalizedCategory(data as Template) : data, error };
 };
 
 export const getTemplateByName = async (templateName: string) => {
@@ -245,7 +296,7 @@ export const getTemplateByName = async (templateName: string) => {
     .select('*')
     .eq('name', templateName)
     .single();
-  return { data, error };
+  return { data: data ? withNormalizedCategory(data as Template) : data, error };
 };
 
 // Document management functions

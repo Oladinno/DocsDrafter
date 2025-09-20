@@ -37,15 +37,14 @@ export const useResponsive = (): ResponsiveState => {
   return {
     width: dimensions.width,
     height: dimensions.height,
-    breakpoint: getCurrentBreakpoint(),
-    isPhone: isPhone(),
-    isTablet: isTablet(),
-    isDesktop: isDesktop(),
-    layout: getResponsiveLayout(),
-    spacing: getResponsiveSpacing(),
+    breakpoint: getCurrentBreakpoint(dimensions),
+    isPhone: isPhone(dimensions),
+    isTablet: isTablet(dimensions),
+    isDesktop: isDesktop(dimensions),
+    layout: getResponsiveLayout(dimensions),
+    spacing: getResponsiveSpacing(dimensions),
   };
 };
-
 // Hook for responsive values that updates on dimension changes
 export const useResponsiveValue = <T>(values: Partial<Record<Breakpoint, T>>): T | undefined => {
   const { breakpoint } = useResponsive();

@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  SafeAreaView,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { FieldValues } from 'react-hook-form';
@@ -21,14 +21,13 @@ import {
   Modal,
   ActivityIndicator as PaperActivityIndicator,
   useTheme,
-  SegmentedButtons,
   Snackbar,
-} from 'react-native-paper';
-import DynamicFormGenerator from '../components/DynamicFormGenerator';
+} from 'react-native-paper';import DynamicFormGenerator from '../components/DynamicFormGenerator';
 import { useDocumentGenerator } from '../hooks/useDocumentGenerator';
 import { useAuth } from '../hooks/useAuth';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useResponsive } from '../src/hooks/useResponsive';
+import { getTemplate, Template as TemplateRow } from '../lib/supabase';
 
 interface JSONSchema {
   type: string;
@@ -133,7 +132,15 @@ const DocumentFormScreen: React.FC = () => {
       return;
     }
 
-    await generate({ id: templateId, name: templateName, json_schema: schema, description: '', created_at: '', metadata: {} }, formData, selectedFileType);
+    // Fetch full template to ensure metadata.templateConfig is available
+    const { data: fullTemplate, error: tplErr } = await getTemplate(templateId);
+    if (tplErr || !fullTemplate) {
+      console.error('Failed to fetch full template:', tplErr);
+      Alert.alert('Error', 'Unable to load template details. Please try again.');
+      return;
+    }
+
+    await generate(fullTemplate as TemplateRow, formData, selectedFileType);
 
     if (!generationError) {
       Alert.alert(
